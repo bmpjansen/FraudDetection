@@ -1,0 +1,153 @@
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+}
+
+main {
+    padding: 20px;
+    gap: 20px;
+    width: 97%;
+}
+.tiles-container {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.main-section {
+    width: 100%;
+    float: left;
+}
+
+
+/* TRIPLE SELECTION SECTION */
+.triple-section {
+    position: fixed;
+    width: 200px;
+    height: 100vh;
+    padding: 10px;
+
+    top: 0;
+    left: 98%;
+    -webkit-transition-duration: 0.3s;
+    -moz-transition-duration: 0.3s;
+    -o-transition-duration: 0.3s;
+    transition-duration: 0.3s;
+    background-color: lightgray;
+}
+.triple-button {
+    margin-top: 5px;
+}
+
+.triple-section-inner {
+    position: fixed;
+    top: 40px;
+    -webkit-transition-duration: 0.3s;
+    -moz-transition-duration: 0.3s;
+    -o-transition-duration: 0.3s;
+    transition-duration: 0.3s;
+}
+.triple-section:hover {
+    left: calc(100% - 200px);
+}
+.triple-section:hover .triple-section-inner {
+    left: 0;
+}
+
+
+
+/* BUTTON INFO ROWS */
+.info-row {
+    min-height: 20px;
+    max-height: 40px;
+    padding: 10px;
+    background-color: #333;
+    color: #fff;
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.left-div, .center-div, .right-div {
+    display: flex;
+    /* border: 1px solid red; */
+    align-items: center;
+    gap: 10px;
+}
+
+.left-div {
+    justify-content: left;
+}
+.center-div {
+    justify-content: center;
+}
+.right-div {
+    justify-content: right;
+}
+
+/* TEXT SECTION */
+.scrollable-section {
+    display: flex;
+    flex-direction: column;
+    margin: 10px 0;
+    height: 80vh;
+    width: 100%;
+    overflow-y: auto;
+}
+
+.version-container {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 10px;
+}
+
+.version-text {
+    display: flex;
+    flex-wrap: wrap;
+    border: 1px solid #ccc;
+    padding: 10px;
+    flex: 1;
+}
+
+.text-minus {
+    background-color: lightcoral;
+}
+
+.text-plus {
+    background-color: lightgreen;
+}
+
+
+/* TABLE */
+#CSVTable {
+    min-height: 2000px;
+    margin-top: 20px;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+th {
+    background-color: #4CAF50;
+    color: white;
+}

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width,
+                   initial-scale=1.0">
+    <link rel="stylesheet"
+          href="/static/css/style.css">
+    <title>Version History</title>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/jquerycsvtotable/jquery.csvToTable.js"></script>
+
+    <script src="/static/javascript/retrieval.js"></script>
+    <script src="/static/javascript/history.js"></script>
+    <script src="/static/javascript/index.js"></script>
+</head>
+<body>
+    <main>
+        <section class="tiles-container">
+
+            <!-- the left section containing the two info rows and the section containing the text -->
+            <section class="main-section" id="main_section">
+
+                <!-- Top info row -->
+                <section class="info-row">
+                    <div class="left-div" style="width: 50%">
+                        <button id="prev_response_button" onclick="previousResponse()">Previous</button>
+                        <div id="index_div" style="width: 50px; margin: 5px">
+                            <label>Index:
+                                <input type="number" id="indexField" onblur="specificResponseViaIndex(this.value)" style="width: 100%" min="0">
+                            </label>
+                        </div>
+                        <button id="next_response_button" onclick="nextResponse()">Next</button>
+                        <div id="response_id_div" style="width: 100px; margin: 5px">
+                            <label>Response ID:
+                                <input type="number" id="responseID-field" onblur="specificResponseViaID(this.value)" style="width: 100%" min="0">
+                            </label>
+                        </div>
+                        <div id="sum_edit_distance_div"><div id="sum_edit_distance_text"><b>Edit Distance</b></div> <div id="sum_edit_distance_val">{ed}</div></div>
+                    </div>
+
+                    <div class="right-div" style="width: 50%">
+                        <div>HTML:</div>
+                        <select name="html" id="html_select" onchange="stripHTML(this)">
+                            <option value="Keep">Keep</option>
+                            <option value="Show">Show</option>
+                            <option value="Strip">Strip*</option>
+                        </select>
+                    </div>
+                </section>
+
+                <!-- Text section -->
+                <div class="scrollable-section">
+                    <div class="version-container">
+                        <div id="left_version_div" class="version-text"></div>
+                        <div id="right_version_div" class="version-text"></div>
+                    </div>
+                </div>
+
+                <!-- Bottom info row -->
+                <section class="info-row">
+                    <div class="left-div"  style="width: 25%">
+                        <div id="stat-div" ></div>
+                    </div>
+
+                    <div class="center-div" style="width: 50%">
+                        <div class="right-div" style="width: 20%">
+                            <button onclick="goToSignificant()">Significant</button>
+                        </div>
+                        <div class="center-div" style="width: 60%">
+                            <button id="first-version" onclick="firstVersion()">First</button>
+                            <button id="previous-version" onclick="previousVersion()">Previous</button>
+                            <div id="version">{Version}</div>
+                            <button id="next-version" onclick="nextVersion()">Next</button>
+                            <button id="final-version" onclick="finalVersion()">Final</button>
+                        </div>
+                        <div class="right-div" style="width: 20%"></div>
+                    </div>
+
+                    <div class="right-div" style="width: 25%">
+                        <div id="edit_distance">Edit Distance: </div>
+                        <div id="timestamp">Time difference: </div>
+                    </div>
+                </section>
+
+                <div id="Plot div" style="display: flex">
+                    <div id="scatter_div"></div>
+                    <div id="box_plot_div"></div>
+                </div>
+
+                <div id="CSVTable"></div>
+
+            </section>
+
+        </section>
+
+    </main>
+
+    <!-- Triple Selection Section -->
+
+    <nav id="side-menu" class="triple-section">
+        <div>
+            <div>
+                <input type="password" id="API_KEY" placeholder="Your ANS API Key" maxlength="30">
+            </div>
+            <div><strong>Assignment IDs to get:</strong></div>
+            <div id="assignment_ids_input_div"></div>
+            <button id="retrieve_button" onclick="retrieve()">Retrieve</button>
+        </div>
+        <div><strong>Already computed assignments</strong></div>
+        <div id="ids_div">
+            <div><label for="aidSelect">Assignment</label><select id="aidSelect" onchange="updateEidOptions()"></select></div>
+            <div><label for="eidSelect">Exercise</label><select id="eidSelect" onchange="updateQidOptions()"></select></div>
+            <div><label for="qidSelect">Question</label><select id="qidSelect" onchange="qidChange()"></select></div>
+        </div>
+    </nav>
+
+
+
+</body>
+</html>

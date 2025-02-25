@@ -96,15 +96,15 @@ if __name__ == '__main__':
     result_dir = (BASE_DIR / 'Data' / 'results').resolve()
     user_dir = (BASE_DIR / 'Data' / 'user').resolve()
 
-    logger.info(f"Starting Unified Response Viewer on port {port}, "
-                f"with debug mode {'ON' if DEBUG else 'OFF'}."
-                f"Delay of {DELAY} seconds."
-                f"Page size limit is {LIMIT}."
-                f"Server url is {BASE_URL}"
+    logger.info(f"Starting Unified Response Viewer on port {port},\n"
+                f"with debug mode {'ON' if DEBUG else 'OFF'}.\n"
+                f"Delay of {DELAY} seconds.\n"
+                f"Page size limit is {LIMIT}.\n"
+                f"Server url is {BASE_URL}\n"
                 )
 
     # initialize and start app
-    dataviewer.init(responses_dir, result_dir, user_dir)
+    dataviewer.init(responses_dir, result_dir, user_dir, executor)
 
     try:
         app.run(debug=DEBUG, port=port)

@@ -144,3 +144,15 @@ function setActiveSet(ids) {
     simplePost("/api/set_active_set", processInfo, ids)
 }
 
+function recheck() {
+    simpleFetch("/api/recheck", processRecheck, ids)
+    document.getElementById("recheckBtn").disabled = true;
+}
+
+function processRecheck(data) {
+    document.getElementById("recheck_div").innerHTML = data.status ? "All responses have been processed" : "Some responses have not been processed. They are being computed now!";
+    if (data.status) {
+        document.getElementById("recheckBtn").disabled = false;
+    }
+}
+

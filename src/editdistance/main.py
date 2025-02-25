@@ -14,57 +14,47 @@ from .algorithms.edit_distance import compute_edit_distances
 
 # author: Valentijn van den Berg
 
-_lock = Lock()
-_n_running_jobs = 0
-_writer_stop_event = Event()
-
-
-def writing_loop(result_directory: Path, queue: Queue, logger_name: str):
-    """
-    Will wait for items in queue and write them to result_directory as pickle files.
-
-    :param result_directory: the result directory.
-    :param queue: the queue to take items from.
-    :param logger_name: the name of the logger.
-    """
-    global _n_running_jobs
-
-    os.makedirs(result_directory, exist_ok=True)
-    logger = logging.getLogger(logger_name)
-
-    # Loop as long as the stop_event has not been set
-    # or, if it has been set, wait for all running tasks to be finished
-    while True:
-        try:
-            new_job = queue.get(block=False)
-        except Empty:
-            with _lock:
-                if _writer_stop_event.is_set() and _n_running_jobs <= 0:
-                    break
-
-            time.sleep(10)
-            continue
-
-        write_dir = (result_directory / new_job['rel_file_path'].parent).resolve()
-        os.makedirs(write_dir, exist_ok=True)
-
-        ed = [len(x) for x in new_job['factorization']]
-
-        with open((write_dir / new_job['rel_file_path'].name).resolve(), 'wb') as file:
-            pickle.dump({
-                'factorization': new_job['factorization'],
-                'edit_distances': ed,
-                'max': max(ed)
-            }, file)
-
-        with _lock:
-            _n_running_jobs -= 1
-
-    logger.info("All computation jobs finished")
-
-
-write_thread = None
-write_queue = Queue()
+# _lock = Lock()
+# _n_running_jobs = 0
+# _writer_stop_event = Event()
+#
+#
+# def writing_loop(result_directory: Path, queue: Queue, logger_name: str):
+#     """
+#     Will wait for items in queue and write them to result_directory as pickle files.
+#
+#     :param result_directory: the result directory.
+#     :param queue: the queue to take items from.
+#     :param logger_name: the name of the logger.
+#     """
+#     global _n_running_jobs
+#
+#     os.makedirs(result_directory, exist_ok=True)
+#     logger = logging.getLogger(logger_name)
+#
+#     # Loop as long as the stop_event has not been set
+#     # or, if it has been set, wait for all running tasks to be finished
+#     while True:
+#         try:
+#             new_job = queue.get(block=False)
+#         except Empty:
+#             with _lock:
+#                 if _writer_stop_event.is_set() and _n_running_jobs <= 0:
+#                     break
+#
+#             time.sleep(10)
+#             continue
+#
+#
+#
+#         with _lock:
+#             _n_running_jobs -= 1
+#
+#     logger.info("All computation jobs finished")
+#
+#
+# write_thread = None
+# write_queue = Queue()
 
 
 def start(executor: Executor, result_directory: Path, stop_event: Event, job_queue: Queue, logger_name: str):
@@ -82,13 +72,13 @@ def start(executor: Executor, result_directory: Path, stop_event: Event, job_que
         raise ValueError("job_queue cannot be None")
 
     logger = logging.getLogger(logger_name)
-    global _n_running_jobs
+    # global _n_running_jobs
 
     # Start the writing thread
-    global write_thread
-    if write_thread is None or not write_thread.is_alive():
-        write_thread = Thread(target=writing_loop, args=(result_directory, write_queue, logger_name), daemon=True)
-        write_thread.start()
+    # global write_thread
+    # if write_thread is None or not write_thread.is_alive():
+    #     write_thread = Thread(target=writing_loop, args=(result_directory, write_queue, logger_name), daemon=True)
+    #     write_thread.start()
 
     logger.info(f"Entering computation loop.")
 
@@ -107,10 +97,10 @@ def start(executor: Executor, result_directory: Path, stop_event: Event, job_que
         logger.debug(f"Got new job: {new_job['rel_file_path']}")
 
         # Submit the task to Flask-Executor
-        executor.submit(compute_edit_distances, 'improved', new_job['base_path'], new_job['rel_file_path'], write_queue)
+        executor.submit(compute_edit_distances, 'improved', new_job['base_path'], new_job['rel_file_path'], result_directory)
 
-        with _lock:
-            _n_running_jobs += 1
-
-    _writer_stop_event.set()
+    #     with _lock:
+    #         _n_running_jobs += 1
+    #
+    # _writer_stop_event.set()
 

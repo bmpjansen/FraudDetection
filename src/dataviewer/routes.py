@@ -134,3 +134,11 @@ def set_active_set():
         logger.error(e)
         return jsonify({"error": e.args}), 500
 
+
+@dv_routes.route("/api/recheck", methods=["GET"])
+def recheck():
+    out = responses.test_all()
+    return jsonify({
+        "status": out,
+    }), 200
+

@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from bs4 import BeautifulSoup
+from flask_executor import Executor
 
+from src.editdistance.algorithms.edit_distance import compute_edit_distances
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +44,17 @@ _response_tree: dict = {}
 _result_dir: Path
 _response_dir: Path
 
+_executor: Executor | None = None
+
 
 def reinit():
     """
     Reinitialize datastructures with the same directories
     """
-    init(_response_dir, _result_dir, _user_dir)
+    init(_response_dir, _result_dir, _user_dir, _executor)
 
 
-def init(response_dir: Path, results_dir: Path, user_dir: Path):
+def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     """
     (Re)initializes all datastructures
 
@@ -58,7 +62,7 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path):
     :param results_dir: the root directory of the computed edit distances
     :param user_dir: the root directory of remaining files
     """
-    global _user_dir, _response_tree, _result_dir, _response_dir
+    global _user_dir, _response_tree, _result_dir, _response_dir,  _executor
 
     _user_dir = user_dir
     makedirs(user_dir, exist_ok=True)
@@ -82,6 +86,8 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path):
 
     else:
         raise RuntimeError("Something went wrong: response tree was None!")
+
+    _executor = ex
 
 
 def construct_response_tree(response_dir: Path):
@@ -116,7 +122,7 @@ def _update_current_index(new_index: int):
     global _current_response_index, _current_eds_info
 
     _current_response_index = new_index
-    _current_eds_info = _read_file(_result_dir, get_cur_id())
+    _current_eds_info = _read_file(_result_dir, get_cur_id(), compute_ed)
 
 
 def next_response():
@@ -334,7 +340,7 @@ def get_tree() -> dict:
     return _response_tree
 
 
-def _read_file(root: Path, ids: list[int]) -> Any:
+def _read_file(root: Path, ids: list[int], fallback_func=None) -> Any:
     if len(ids) != 4:
         ValueError(f"ids was of unexpected length. Was {len(ids)}, expected 4.")
 
@@ -344,6 +350,45 @@ def _read_file(root: Path, ids: list[int]) -> Any:
 
     path = path.with_suffix(".pickle")
 
+    if not path.exists():
+        if fallback_func is not None:
+            logger.debug(f"No such file: {path}. Using fallback function.")
+            fallback_func(path.relative_to(root))
+            return {
+                'factorization': [],
+                'edit_distances': [0],
+                'max': 0
+            }
+        else:
+            raise FileNotFoundError(f"File {path} does not exist!")
+
     with open(path, 'rb') as file:
         return pickle.load(file)
 
+
+def compute_ed(rel_path: Path):
+    if _executor is None:
+        logger.warning("No executor found. Skipping. "
+                       "If this message is given at startup, then it can safely be ignored.")
+        return
+
+    _executor.submit(compute_edit_distances, 'improved', _response_dir, rel_path, _result_dir)
+
+
+def test_all():
+    responses = _get_all_leaves(_response_tree, [])
+
+    found_all = True
+
+    for ids in responses:
+        path = _result_dir
+        for i in ids:
+            path = path / str(i)
+
+        path = path.with_suffix(".pickle")
+
+        if not path.exists():
+            found_all = False
+            compute_ed(path.relative_to(_result_dir))
+
+    return found_all

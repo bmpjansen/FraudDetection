@@ -99,7 +99,7 @@
 
     <!-- Triple Selection Section -->
 
-    <nav id="side-menu" class="triple-section">
+    <nav id="side-menu" class="triple-section" style="gap: 8px">
         <div>
             <div>
                 <input type="password" id="API_KEY" placeholder="Your ANS API Key" maxlength="30">
@@ -108,11 +108,16 @@
             <div id="assignment_ids_input_div"></div>
             <button id="retrieve_button" onclick="retrieve()">Retrieve</button>
         </div>
-        <div><strong>Already computed assignments</strong></div>
+        <div><strong>Already retrieved assignments</strong></div>
         <div id="ids_div">
             <div><label for="aidSelect">Assignment</label><select id="aidSelect" onchange="updateEidOptions()"></select></div>
             <div><label for="eidSelect">Exercise</label><select id="eidSelect" onchange="updateQidOptions()"></select></div>
             <div><label for="qidSelect">Question</label><select id="qidSelect" onchange="qidChange()"></select></div>
+        </div>
+        <div><strong>Recheck if edit distance have been computed.</strong> <i>This should not be done too often to prevent unnecessarily computations. (Backend does not check whether a computation is in process, just whether it has been completed and if not it will start a new thread.)</i></div>
+        <div>
+            <button id="recheckBtn" onclick="recheck()">Recheck</button>
+            <div id="recheck_div"></div>
         </div>
     </nav>
 

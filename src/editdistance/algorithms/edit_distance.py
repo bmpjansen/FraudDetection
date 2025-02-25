@@ -1,4 +1,6 @@
 import ctypes
+import pickle
+from os import makedirs
 from pathlib import Path
 from queue import Queue
 
@@ -46,23 +48,30 @@ alg_dict = {
 }
 
 
-def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path: Path, result_queue: Queue) -> None:
+def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path: Path, result_directory: Path) -> None:
     """
     Compute the edit distance for a sequence of words.
 
     :param algorithm: the algorithm to use
     :param base_path: the root path of the data
     :param rel_pickle_file_path: the path to the pickle file relative to 'base_path'
-    :param result_queue: the queue to put the results in
+    :param result_directory: where to store the results
     """
     if algorithm not in alg_dict:
         raise RuntimeError(f"Unknown algorithm: {algorithm}")
 
     factorization = alg_dict[algorithm](base_path / rel_pickle_file_path)
 
-    result_queue.put({
-        "factorization": factorization,
-        "rel_file_path": rel_pickle_file_path
-    })
+    write_dir = (result_directory / rel_pickle_file_path.parent).resolve()
+    makedirs(write_dir, exist_ok=True)
+
+    ed = [len(x) for x in factorization]
+
+    with open((write_dir / rel_pickle_file_path.name).resolve(), 'wb') as file:
+        pickle.dump({
+            'factorization': factorization,
+            'edit_distances': ed,
+            'max': max(ed)
+        }, file)
 
 

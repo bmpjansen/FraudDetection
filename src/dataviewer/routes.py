@@ -134,30 +134,3 @@ def set_active_set():
         logger.error(e)
         return jsonify({"error": e.args}), 500
 
-
-# @dv_routes.route("/api/sortOn", methods=["POST"])
-# def sort_on():
-#     data = request.get_json()
-#     print(f"Sorting on {data['metric']}")
-#     manager.sort_on(data["metric"])
-#     return construct_info(), 200
-
-
-# @app.route("/api/delete/cache", methods=["POST"])
-# def delete_cache():
-#     try:
-#         manager.clear_user_dir()
-#         status = "success"
-#     except (OSError, PermissionError, FileNotFoundError) as e:
-#         status = e
-#
-#     return jsonify({
-#         "status": status
-#     })
-
-
-# def start_server():
-#     manager.init(Path(app.root_path), directories, use_legacy, create_graphs)
-
-
-

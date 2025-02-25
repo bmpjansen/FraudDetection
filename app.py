@@ -53,13 +53,14 @@ def start_retrieval():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog="Unified Response Viewer")
     parser.add_argument("-p", "--port", required=False, default=5000, type=int, help="The port to use.")
-    parser.add_argument("--debug", required=False, default=False, action="store_true")
     parser.add_argument("-s", "--server", required=False,
                         default="https://ans.app/api/v2", help="The api server to use.")
     parser.add_argument("-d", "--delay", required=False, default=0.2, type=float,
                         help="The delay between api calls.")
     parser.add_argument("-pl", "--pagelimit", required=False, default=20, type=int,
                         help="The page size limit to use when using the ANS api.")
+    parser.add_argument("--debug", required=False, default=False, action="store_true",
+                        help="Will log more verbosely. For debug purposes.")
 
     args = parser.parse_args()
 

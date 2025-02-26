@@ -40,6 +40,7 @@ _current_response_index: int = 0
 _current_eds_info: dict | None = None
 
 _response_tree: dict = {}
+_edit_distance_tree: dict = {}
 
 _result_dir: Path
 _response_dir: Path
@@ -62,7 +63,7 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     :param results_dir: the root directory of the computed edit distances
     :param user_dir: the root directory of remaining files
     """
-    global _user_dir, _response_tree, _result_dir, _response_dir,  _executor
+    global _user_dir, _response_tree, _edit_distance_tree, _result_dir, _response_dir,  _executor
 
     _user_dir = user_dir
     makedirs(user_dir, exist_ok=True)
@@ -70,28 +71,24 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     _response_dir = response_dir
     _result_dir = results_dir
 
-    _response_tree = construct_response_tree(response_dir)
+    _response_tree, _edit_distance_tree = construct_trees(response_dir)
 
     logger.debug(_response_tree)
 
     if _response_tree is not None:
-        if len(list(_response_tree.keys())) > 0:
-            assignment_id = list(_response_tree.keys())[0]
-            reset_response_ids(_find_all_response_ids([assignment_id]))
-        else:
-            try:
-                set_active_set([])
-            except FileNotFoundError:
-                pass
-
+        try:
+            set_active_set([])
+        except FileNotFoundError:
+            pass
     else:
         raise RuntimeError("Something went wrong: response tree was None!")
 
     _executor = ex
 
 
-def construct_response_tree(response_dir: Path):
+def construct_trees(response_dir: Path):
     tree = {}
+    ed_tree = {}
 
     for file_path in response_dir.glob('./*/*/*/*.pickle'):
         # Extract parts of the path
@@ -103,16 +100,20 @@ def construct_response_tree(response_dir: Path):
 
         if as_id not in tree:
             tree[as_id] = {}
+            ed_tree[as_id] = {}
 
         if ex_id not in tree[as_id]:
             tree[as_id][ex_id] = {}
+            ed_tree[as_id][ex_id] = {}
 
         if q_id not in tree[as_id][ex_id]:
             tree[as_id][ex_id][q_id] = []
+            ed_tree[as_id][ex_id][q_id] = {}
 
+        ed_tree[as_id][ex_id][q_id][resp_id] = _read_file(_result_dir, [as_id, ex_id, q_id, resp_id])["max"]
         tree[as_id][ex_id][q_id].append(resp_id)
 
-    return tree
+    return tree, ed_tree
 
 
 def _update_current_index(new_index: int):
@@ -122,7 +123,7 @@ def _update_current_index(new_index: int):
     global _current_response_index, _current_eds_info
 
     _current_response_index = new_index
-    _current_eds_info = _read_file(_result_dir, get_cur_id(), compute_ed)
+    _current_eds_info = _read_file(_result_dir, get_cur_id())
 
 
 def next_response():
@@ -270,11 +271,16 @@ def set_active_set(ids: list[int|str]):
     global _response_ids
 
     if len(ids) == 0:
-        _response_ids = _get_all_leaves(_response_tree, [])
-        return
+        new_response_ids = _get_all_leaves(_response_tree, [])
+    else:
+        ids = [int(i) for i in ids]
+        new_response_ids = _find_all_response_ids(ids)
 
-    ids = [int(id) for id in ids]
-    reset_response_ids( _find_all_response_ids(ids) )
+    # sort ids on their edit distance
+    new_response_ids.sort(reverse=True,
+                          key=lambda ids_list: _edit_distance_tree[ids_list[0]][ids_list[1]][ids_list[2]][ids_list[3]])
+
+    reset_response_ids( new_response_ids )
 
 
 def _find_all_response_ids(ids: list[int], tree: dict | list = None, index: int = 0) -> list[list[int]]:
@@ -340,7 +346,7 @@ def get_tree() -> dict:
     return _response_tree
 
 
-def _read_file(root: Path, ids: list[int], fallback_func=None) -> Any:
+def _read_file(root: Path, ids: list[int], should_recompute: bool = False) -> dict | list:
     if len(ids) != 4:
         ValueError(f"ids was of unexpected length. Was {len(ids)}, expected 4.")
 
@@ -351,16 +357,14 @@ def _read_file(root: Path, ids: list[int], fallback_func=None) -> Any:
     path = path.with_suffix(".pickle")
 
     if not path.exists():
-        if fallback_func is not None:
+        if should_recompute:
             logger.debug(f"No such file: {path}. Using fallback function.")
-            fallback_func(path.relative_to(root))
-            return {
-                'factorization': [],
-                'edit_distances': [0],
-                'max': 0
-            }
-        else:
-            raise FileNotFoundError(f"File {path} does not exist!")
+            compute_ed(path.relative_to(root))
+        return {
+            'factorization': [],
+            'edit_distances': [0],
+            'max': 0
+        }
 
     with open(path, 'rb') as file:
         return pickle.load(file)

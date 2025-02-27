@@ -9,6 +9,20 @@ let goToSig = false;
 
 function fetchHistory() {
     console.log("fetching history...")
+    resetHistory()
+    history = [
+        {
+            "changes": {
+                "content": "<i>Loading Response...</i>"
+            }
+        },
+        {
+            "changes": {
+                "content": "<i>Loading Response...</i>"
+            }
+        }
+    ]
+    setVersionNumber(1);
 
     fetch("/api/history")
         .then(response => response.json())
@@ -152,8 +166,8 @@ function setVersionNumber(number) {
     if (number <= 1) {
         number = 1;
     }
-    setText();
     currentVersion = number
+    setText();
     document.getElementById("version").innerHTML = `${number} / ${nVersions}`
 
     document.getElementById("next-version").disabled = number === nVersions

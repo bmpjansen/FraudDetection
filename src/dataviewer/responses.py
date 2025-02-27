@@ -76,10 +76,14 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     logger.debug(_response_tree)
 
     if _response_tree is not None:
-        try:
-            set_active_set([])
-        except FileNotFoundError:
-            pass
+        if len(list(_response_tree.keys())) > 0:
+            assignment_id = list(_response_tree.keys())[0]
+            reset_response_ids(_find_all_response_ids([assignment_id]))
+        else:
+            try:
+                set_active_set([])
+            except FileNotFoundError:
+                pass
     else:
         raise RuntimeError("Something went wrong: response tree was None!")
 
@@ -110,29 +114,41 @@ def construct_trees(response_dir: Path):
             tree[as_id][ex_id][q_id] = []
             ed_tree[as_id][ex_id][q_id] = {}
 
-        ed_tree[as_id][ex_id][q_id][resp_id] = _read_file(_result_dir, [as_id, ex_id, q_id, resp_id])["max"]
+        ed_tree[as_id][ex_id][q_id][resp_id] = _read_file(_result_dir, [as_id, ex_id, q_id, resp_id], ED_DEFAULT)["max"]
         tree[as_id][ex_id][q_id].append(resp_id)
 
     return tree, ed_tree
 
 
 def _update_current_index(new_index: int):
-    if not 0 <= new_index < len(_response_ids):
+    if not -1 <= new_index < len(_response_ids):
         raise ValueError(f"Invalid response index {new_index}")
 
     global _current_response_index, _current_eds_info
 
     _current_response_index = new_index
-    _current_eds_info = _read_file(_result_dir, get_cur_id())
+
+    if new_index >= 0:
+        _current_eds_info = _read_file(_result_dir, get_cur_id(), ED_DEFAULT)
+    else:
+        _current_eds_info = ED_DEFAULT
 
 
 def next_response():
     global _current_response_index
+
+    if _current_response_index == -1:
+        return
+
     _update_current_index((_current_response_index + 1) % len(_response_ids))
 
 
 def previous_response():
     global _current_response_index
+
+    if _current_response_index == -1:
+        return
+
     _update_current_index((_current_response_index - 1) % len(_response_ids))
 
 
@@ -158,7 +174,7 @@ def specific_response_id(rid: int):
 
 def get_history() -> dict[str, list]:
 
-    content = _read_file(_response_dir, get_cur_id())
+    content = _read_file(_response_dir, get_cur_id(), RESPONSE_DEFAULT)
 
     if _should_strip_html():
         if _show_edbo_phrases:
@@ -325,9 +341,13 @@ def _get_all_leaves(tree: dict[int, dict | list] | list[int], prefix: list[int])
 
 
 def reset_response_ids(new_ids: list[list[int]]):
-    global _response_ids, _current_response_index
+    global _response_ids
     _response_ids = new_ids
-    _update_current_index(0)
+
+    if len(_response_ids) > 0:
+        _update_current_index(0)
+    else:
+        _update_current_index(-1)
 
 
 def get_current_eds() -> list[int]:
@@ -346,7 +366,23 @@ def get_tree() -> dict:
     return _response_tree
 
 
-def _read_file(root: Path, ids: list[int], should_recompute: bool = False) -> dict | list:
+ED_DEFAULT = {
+                'factorization': [],
+                'edit_distances': [0],
+                'max': 0
+             }
+
+RESPONSE_DEFAULT = [
+                        {
+                            "timestamp": "2025-01-01T00:00:00.000+02:00",
+                            "changes": {
+                                            "content": None
+                                        }
+                        }
+                    ]
+
+
+def _read_file(root: Path, ids: list[int], default=None) -> dict | list:
     if len(ids) != 4:
         ValueError(f"ids was of unexpected length. Was {len(ids)}, expected 4.")
 
@@ -357,14 +393,7 @@ def _read_file(root: Path, ids: list[int], should_recompute: bool = False) -> di
     path = path.with_suffix(".pickle")
 
     if not path.exists():
-        if should_recompute:
-            logger.debug(f"No such file: {path}. Using fallback function.")
-            compute_ed(path.relative_to(root))
-        return {
-            'factorization': [],
-            'edit_distances': [0],
-            'max': 0
-        }
+        return default
 
     with open(path, 'rb') as file:
         return pickle.load(file)

@@ -21,7 +21,7 @@ function processInfo(data) {
     currentIndex = data["index"];
     setResponseToCurrent();
 
-    document.getElementById("prev_response_button").disabled = data["index"] === 0
+    document.getElementById("prev_response_button").disabled = data["index"] <= 0
     document.getElementById("next_response_button").disabled = data["index"] === data["n_responses"]-1
 
     significantEd = data["max_ed"];

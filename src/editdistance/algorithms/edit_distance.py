@@ -71,7 +71,7 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
         pickle.dump({
             'factorization': factorization,
             'edit_distances': ed,
-            'max': max(ed)
+            'max': max(ed + [0])
         }, file)
 
 

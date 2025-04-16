@@ -2,9 +2,10 @@ import argparse
 import os
 import sys
 from datetime import datetime
-from multiprocessing import Event, Queue
 from pathlib import Path
 import logging
+from queue import Queue
+from threading import Event
 
 from flask import Flask, jsonify, request
 from flask_executor import Executor

@@ -88,8 +88,12 @@ def compute_suffix_array(pickle_file_path: Path) -> list[list[int]]:
     logger.info(f"Started lz77 (improved) with {pickle_file_path.stem}")
 
     word, separation_indices = util.get_word_from_file(pickle_file_path)
-
     n = len(word)
+
+    if n == 0:
+        logger.info(f"Completed lz77 with {pickle_file_path.stem}")
+        return []
+
     sa = improved_suffix_array(word, n)
     lcp = compute_lcp(word, sa, n)
 
@@ -102,3 +106,4 @@ def compute_suffix_array(pickle_file_path: Path) -> list[list[int]]:
     logger.info(f"Completed lz77 with {pickle_file_path.stem}")
 
     return lz
+

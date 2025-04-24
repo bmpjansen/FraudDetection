@@ -41,6 +41,8 @@ _current_eds_info: dict | None = None
 
 _response_tree: dict = {}
 _edit_distance_tree: dict = {}
+_names_tree: dict = {}
+_names_ids_list: list = {}
 
 _result_dir: Path
 _response_dir: Path
@@ -63,7 +65,8 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     :param results_dir: the root directory of the computed edit distances
     :param user_dir: the root directory of remaining files
     """
-    global _user_dir, _response_tree, _edit_distance_tree, _result_dir, _response_dir,  _executor
+    global _user_dir, _response_tree, _edit_distance_tree, _names_tree, _names_ids_list, \
+        _result_dir, _response_dir,  _executor
 
     _user_dir = user_dir
     makedirs(user_dir, exist_ok=True)
@@ -71,7 +74,7 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     _response_dir = response_dir
     _result_dir = results_dir
 
-    _response_tree, _edit_distance_tree = construct_trees(response_dir)
+    _response_tree, _edit_distance_tree, _names_tree, _names_ids_list = construct_trees(response_dir)
 
     logger.debug(_response_tree)
 
@@ -90,9 +93,11 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     _executor = ex
 
 
-def construct_trees(response_dir: Path):
+def construct_trees(response_dir: Path) -> tuple[dict, dict, dict, list]:
     tree = {}
     ed_tree = {}
+    names_ids_list = [{}, {}, {}]
+    names_tree = {}
 
     for file_path in response_dir.glob('./*/*/*/*.pickle'):
         # Extract parts of the path
@@ -105,19 +110,37 @@ def construct_trees(response_dir: Path):
         if as_id not in tree:
             tree[as_id] = {}
             ed_tree[as_id] = {}
+            as_name = str(as_id)
+            if (response_dir / str(as_id) / 'name.txt').exists():
+                with open(response_dir / str(as_id) / 'name.txt', 'r') as file:
+                    as_name = file.read()
+            names_ids_list[0][as_name] = as_id
+            names_tree[as_name] = {}
 
         if ex_id not in tree[as_id]:
             tree[as_id][ex_id] = {}
             ed_tree[as_id][ex_id] = {}
+            ex_name = str(ex_id)
+            if (response_dir / str(as_id) / str(ex_id) / 'name.txt').exists():
+                with open(response_dir / str(as_id) / str(ex_id) / 'name.txt', 'r') as file:
+                    ex_name = file.read()
+            names_ids_list[1][ex_name] = ex_id
+            names_tree[as_name][ex_name] = {}
 
         if q_id not in tree[as_id][ex_id]:
             tree[as_id][ex_id][q_id] = []
             ed_tree[as_id][ex_id][q_id] = {}
+            q_name = str(q_id)
+            if (response_dir / str(as_id) / str(ex_id) / str(q_id) / 'name.txt').exists():
+                with open(response_dir / str(as_id) / str(ex_id) / str(q_id) / 'name.txt', 'r') as file:
+                    q_name = file.read()
+            names_ids_list[2][q_name] = q_id
+            names_tree[as_name][ex_name][q_name] = {}
 
         ed_tree[as_id][ex_id][q_id][resp_id] = _read_file(_result_dir, [as_id, ex_id, q_id, resp_id], ED_DEFAULT)["max"]
         tree[as_id][ex_id][q_id].append(resp_id)
 
-    return tree, ed_tree
+    return tree, ed_tree, names_tree, names_ids_list
 
 
 def _update_current_index(new_index: int):
@@ -364,6 +387,10 @@ def get_max_ed() -> int:
 
 def get_tree() -> dict:
     return _response_tree
+
+
+def get_names_tree() -> list:
+    return [_names_tree, _names_ids_list]
 
 
 ED_DEFAULT = {

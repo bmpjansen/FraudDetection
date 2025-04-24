@@ -124,6 +124,11 @@ def get_id_tree():
     return jsonify(responses.get_tree()), 200
 
 
+@dv_routes.route("/api/names_tree", methods=["GET"])
+def get_names_tree():
+    return jsonify(responses.get_names_tree()), 200
+
+
 @dv_routes.route("/api/set_active_set", methods=["POST"])
 def set_active_set():
     data = request.get_json()

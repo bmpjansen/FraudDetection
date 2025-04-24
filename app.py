@@ -36,7 +36,8 @@ def start_retrieval():
     def retriever_task():
         response_fetcher = AnsResponseFetcher(data["API_KEY"], DELAY, LIMIT)
         response_fetcher.run(BASE_URL, data['ids'], BASE_DIR, responses_dir, None, job_queue)
-        logger.info("Retrieval finished")
+        logger.info("Retrieval of responses finished. Continuing with names.")
+        response_fetcher.fetch_unknown_names(responses_dir, BASE_URL)
         stop_event.set()
 
     def computation_task():

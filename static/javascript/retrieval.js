@@ -71,24 +71,29 @@ function retrieve() {
         })
 }
 
-let responseTree;
+// let responseTree;
+let namesTree;
+let nameIdList;
 let aidSelect;
 let eidSelect;
 let qidSelect;
 
 
 function getIdTree() {
-    simpleFetch("/api/id_tree", processIdTree);
+    simpleFetch("/api/names_tree", processNamesTree)
 }
 
 
-function processIdTree(data) {
-    responseTree = data;
+function processNamesTree(data) {
+    console.log(data)
+    namesTree = data[0];
+    nameIdList = data[1];
+
     aidSelect = document.getElementById("aidSelect");
     eidSelect = document.getElementById("eidSelect");
     qidSelect = document.getElementById("qidSelect");
 
-    populateSelect(aidSelect, Object.keys(responseTree));
+    populateSelect(aidSelect, Object.keys(namesTree));
     updateEidOptions();
 }
 
@@ -102,8 +107,8 @@ function populateSelect(select, options) {
 
 function updateEidOptions() {
     const aid = aidSelect.value;
-    let eids = aid === "all" ? Object.values(responseTree).flatMap(Object.keys) :
-                                       Object.keys(responseTree[aid] || {});
+    let eids = aid === "all" ? Object.values(namesTree).flatMap(Object.keys) :
+                                       Object.keys(namesTree[aid] || {});
     populateSelect(eidSelect, eids);
     updateQidOptions();
 }
@@ -114,25 +119,28 @@ function updateQidOptions() {
     let qids;
 
     if (aid === "all") {
-        qids = Object.values(responseTree).flatMap(a => Object.values(a).flatMap(Object.keys));
+        qids = Object.values(namesTree).flatMap(a => Object.values(a).flatMap(Object.keys));
     } else if (eid === "all") {
-        qids = Object.values(responseTree[aid] || {}).flatMap(Object.keys);
+        qids = Object.values(namesTree[aid] || {}).flatMap(Object.keys);
     } else {
-        qids = Object.keys(responseTree[aid]?.[eid] || {});
+        qids = Object.keys(namesTree[aid]?.[eid] || {});
     }
     populateSelect(qidSelect, qids);
     qidChange()
 }
 
 function qidChange() {
-    const ids = [aidSelect.value, eidSelect.value, qidSelect.value];
+    const names = [aidSelect.value, eidSelect.value, qidSelect.value];
     const out = [];
 
-    for (let i = 0; i < ids.length; i++) {
-        if (ids[i] === 'all') {
+    console.log(`nameIdList: ${nameIdList}`)
+    console.log(nameIdList)
+
+    for (let i = 0; i < names.length; i++) {
+        if (names[i] === 'all') {
             break;
         }
-        out.push(ids[i]);
+        out.push(nameIdList[i][names[i]]);
     }
 
     setActiveSet(out);

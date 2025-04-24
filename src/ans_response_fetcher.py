@@ -114,6 +114,61 @@ class AnsResponseFetcher:
             'Authorization': f"Bearer {api_key}"
         }
 
+    def fetch_unknown_names(self, response_dir: Path, base_url: str):
+
+        logger.info("Retrieving names...")
+
+        for file_path in response_dir.glob('./*/*/*'):
+            if file_path.is_file():
+                continue
+
+            # Extract parts of the path
+            as_id, ex_id, q_id = file_path.parts[-3:]
+            as_id = int(as_id)
+            ex_id = int(ex_id)
+            q_id = int(q_id)
+
+            print(as_id, ex_id, q_id)
+
+            filename = 'name.txt'
+
+            def retrieve(url, filepath, key):
+                try:
+                    if not filepath.exists():
+                        self._wait_if_required()
+                        response = requests.get(url, headers=self.request_header)
+                        self.last_request_time = time.time()
+
+                        print(response.status_code)
+
+                        # if we receive HTTP 429 (Too many requests), wait before retrying
+                        if response.status_code == 429:
+                            logger.warning("Got back HTTP 429; sleeping for 30 seconds...")
+                            time.sleep(30)
+                            return
+
+                        if response.status_code == 200:
+                            resp_json = response.json()
+
+                            with open(filepath, 'w') as file:
+                                file.write(resp_json[key])
+                except Exception as e:
+                    logger.warn(f"Exception while retrieve name for {filepath.parent.relative_to(response_dir)}. Exception: {e}")
+
+            retrieve(url=f"{base_url}/assignments/{as_id}",
+                     filepath=response_dir / str(as_id) / filename,
+                     key='name')
+
+            retrieve(url=f"{base_url}/exercises/{ex_id}",
+                     filepath=response_dir / str(as_id) / str(ex_id) / filename,
+                     key='name')
+
+            retrieve(url=f"{base_url}/questions/{q_id}",
+                     filepath=response_dir / str(as_id) / str(ex_id) / str(q_id) / filename,
+                     key='position')
+
+        logger.info("Retrieved all names.")
+
     def _write(self, directory: Path, content: dict | list, ids: list, encoding: str = 'utf-8') -> tuple[Path, Path]:
         """
         Write 'content' to a file located in 'directory'.

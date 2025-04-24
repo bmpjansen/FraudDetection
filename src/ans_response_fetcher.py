@@ -128,8 +128,6 @@ class AnsResponseFetcher:
             ex_id = int(ex_id)
             q_id = int(q_id)
 
-            print(as_id, ex_id, q_id)
-
             filename = 'name.txt'
 
             def retrieve(url, filepath, key):
@@ -139,8 +137,6 @@ class AnsResponseFetcher:
                         response = requests.get(url, headers=self.request_header)
                         self.last_request_time = time.time()
 
-                        print(response.status_code)
-
                         # if we receive HTTP 429 (Too many requests), wait before retrying
                         if response.status_code == 429:
                             logger.warning("Got back HTTP 429; sleeping for 30 seconds...")
@@ -149,9 +145,9 @@ class AnsResponseFetcher:
 
                         if response.status_code == 200:
                             resp_json = response.json()
-
                             with open(filepath, 'w') as file:
-                                file.write(resp_json[key])
+                                file.write(str(resp_json[key]))
+
                 except Exception as e:
                     logger.warn(f"Exception while retrieve name for {filepath.parent.relative_to(response_dir)}. Exception: {e}")
 

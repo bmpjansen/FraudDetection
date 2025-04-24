@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 
 from . import util, lz77
@@ -83,15 +82,10 @@ def compute_suffix_array(pickle_file_path: Path) -> list[list[int]]:
              Example: snapshots = [A, B, C] will be concatenated as A$1B$2C,
              where $1 and $2 are unique separation characters.
     """
-
-    logger = logging.getLogger()
-    logger.info(f"Started lz77 (improved) with {pickle_file_path.stem}")
-
     word, separation_indices = util.get_word_from_file(pickle_file_path)
     n = len(word)
 
     if n == 0:
-        logger.info(f"Completed lz77 with {pickle_file_path.stem}")
         return []
 
     sa = improved_suffix_array(word, n)
@@ -102,8 +96,6 @@ def compute_suffix_array(pickle_file_path: Path) -> list[list[int]]:
     lpf = lz77.compute_lpf(sa, lcp, n, in_place=True)
 
     lz = lz77.compute_lz(lpf, n, separation_indices)
-
-    logger.info(f"Completed lz77 with {pickle_file_path.stem}")
 
     return lz
 

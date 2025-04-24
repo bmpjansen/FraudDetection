@@ -2,7 +2,8 @@ import ctypes
 import pickle
 from os import makedirs
 from pathlib import Path
-from queue import Queue
+import logging
+from threading import Lock
 
 from . import suffix_array_naive, suffix_array_improved
 
@@ -48,6 +49,12 @@ alg_dict = {
 }
 
 
+n_running_jobs = 0
+lock = Lock()
+
+logger = logging.getLogger()
+
+
 def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path: Path, result_directory: Path) -> None:
     """
     Compute the edit distance for a sequence of words.
@@ -57,6 +64,15 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
     :param rel_pickle_file_path: the path to the pickle file relative to 'base_path'
     :param result_directory: where to store the results
     """
+    global n_running_jobs
+
+    logger.info(f"Computing edit distance for response {rel_pickle_file_path.stem}")
+    try:
+        with lock:
+            n_running_jobs += 1
+    except RuntimeError as e:
+        print(f"Error while incrementing running_jobs! Exception: {e}")
+
     try:
         if algorithm not in alg_dict:
             raise RuntimeError(f"Unknown algorithm: {algorithm}")
@@ -79,4 +95,11 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
         print(f"An exception occurred while computing the edit distance for response {rel_pickle_file_path}!\n "
               f"Exception message: {e}")
 
+    try:
+        with lock:
+            n_running_jobs -= 1
+    except RuntimeError as e:
+        print(f"Error while decrementing running_jobs! Exception: {e}")
+
+    logger.info(f"Completed response {rel_pickle_file_path.stem}. Number of remaining jobs: {n_running_jobs}")
 

@@ -9,7 +9,7 @@ from threading import Event, Thread, Lock
 from flask_executor import Executor
 from numpy import max
 
-from .algorithms.edit_distance import compute_edit_distances
+from .algorithms.edit_distance import compute_edit_distances, add_to_running_jobs
 
 
 # author: Valentijn van den Berg
@@ -55,6 +55,7 @@ def start(executor: Executor, result_directory: Path, stop_event: Event, job_que
         logger.debug(f"Got new job: {new_job['rel_file_path']}")
 
         # Submit the task to Flask-Executor
+        add_to_running_jobs(1)
         executor.submit(compute_edit_distances, 'improved', new_job['base_path'], new_job['rel_file_path'], result_directory)
 
 

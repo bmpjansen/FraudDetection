@@ -51,8 +51,16 @@ alg_dict = {
 
 n_running_jobs = 0
 lock = Lock()
-
 logger = logging.getLogger()
+
+
+def add_to_running_jobs(amount: int = 1):
+    try:
+        global n_running_jobs
+        with lock:
+            n_running_jobs += amount
+    except RuntimeError as e:
+        print(f"Error while adding to/removing from running_jobs! Exception: {e}")
 
 
 def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path: Path, result_directory: Path) -> None:
@@ -67,11 +75,6 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
     global n_running_jobs
 
     logger.info(f"Computing edit distance for response {rel_pickle_file_path.stem}")
-    try:
-        with lock:
-            n_running_jobs += 1
-    except RuntimeError as e:
-        print(f"Error while incrementing running_jobs! Exception: {e}")
 
     try:
         if algorithm not in alg_dict:
@@ -95,11 +98,7 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
         print(f"An exception occurred while computing the edit distance for response {rel_pickle_file_path}!\n "
               f"Exception message: {e}")
 
-    try:
-        with lock:
-            n_running_jobs -= 1
-    except RuntimeError as e:
-        print(f"Error while decrementing running_jobs! Exception: {e}")
+    add_to_running_jobs(-1)
 
     logger.info(f"Completed response {rel_pickle_file_path.stem}. Number of remaining jobs: {n_running_jobs}")
 

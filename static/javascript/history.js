@@ -4,8 +4,18 @@ let currentVersion;
 let editDistances;
 let timestamps;
 let historyFormat = "old"
+let result_id = undefined
 
 let goToSig = false;
+
+function toANSHandler() {
+    if (result_id === undefined) {
+        alert("No result id could be found. Retrieving the assignment again might fix this.")
+        return
+    }
+    window.open(`https://ans.app/results/${result_id}`, '_blank');
+}
+
 
 function fetchHistory() {
     console.log("fetching history...")
@@ -38,8 +48,7 @@ function processHistory(data) {
     timestamps = data["timestamps"];
     nVersions = history.length-1
     historyFormat = data["format"]
-
-    console.log(history)
+    result_id = history[0]["result_id"]
 
     if ( 1 <= currentVersion && currentVersion <= nVersions ) {
         setVersionNumber(currentVersion)
@@ -54,6 +63,7 @@ function resetHistory() {
     editDistances = [];
     nVersions = -1;
     timestamps = []
+    result_id = undefined
 }
 
 function goToSignificant() {

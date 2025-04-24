@@ -264,6 +264,11 @@ class AnsResponseFetcher:
                 except:
                     pass
 
+                # add result id to json
+                if len(ids) > 2:
+                    if isinstance(resp_json, list) and len(resp_json) > 0:
+                        resp_json[0]["result_id"] = ids[1]
+
                 # write to file
                 if should_write or should_queue:
                     base_path, rel_path = self._write(path, resp_json, ids)

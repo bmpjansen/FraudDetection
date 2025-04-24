@@ -50,6 +50,8 @@ function processHistory(data) {
     historyFormat = data["format"]
     result_id = history[0]["result_id"]
 
+    document.getElementById("toAnsBtn").disabled = result_id === undefined
+
     if ( 1 <= currentVersion && currentVersion <= nVersions ) {
         setVersionNumber(currentVersion)
     } else {

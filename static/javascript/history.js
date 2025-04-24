@@ -39,6 +39,8 @@ function processHistory(data) {
     nVersions = history.length-1
     historyFormat = data["format"]
 
+    console.log(history)
+
     if ( 1 <= currentVersion && currentVersion <= nVersions ) {
         setVersionNumber(currentVersion)
     } else {
@@ -121,8 +123,13 @@ function setText() {
     }
 
     if (historyFormat === "old") {
-        document.getElementById("left_version_div").innerHTML = history[currentVersion-1]["changes"]["content"];
-        document.getElementById("right_version_div").innerHTML = history[currentVersion]["changes"]["content"];
+        if (history[currentVersion] === undefined) {
+            document.getElementById("left_version_div").innerHTML = "<i>*No previous version exists*</i>";
+            document.getElementById("right_version_div").innerHTML = processContent(history[currentVersion-1]["changes"]["content"])
+        } else {
+            document.getElementById("left_version_div").innerHTML = processContent(history[currentVersion-1]["changes"]["content"])
+            document.getElementById("right_version_div").innerHTML = processContent(history[currentVersion]["changes"]["content"])
+        }
     } else {
         const pair = processText(history[currentVersion - 1])
 
@@ -131,6 +138,18 @@ function setText() {
     }
 
 
+}
+
+/**
+ * Make null values explicit
+ * @param content the content
+ * @returns {*|string} explicit null as string or content
+ */
+function processContent(content) {
+    if (content === null) {
+        return "<i>*NULL*</i>"
+    }
+    return content
 }
 
 function nextVersion() {

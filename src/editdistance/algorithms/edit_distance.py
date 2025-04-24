@@ -57,21 +57,26 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
     :param rel_pickle_file_path: the path to the pickle file relative to 'base_path'
     :param result_directory: where to store the results
     """
-    if algorithm not in alg_dict:
-        raise RuntimeError(f"Unknown algorithm: {algorithm}")
+    try:
+        if algorithm not in alg_dict:
+            raise RuntimeError(f"Unknown algorithm: {algorithm}")
 
-    factorization = alg_dict[algorithm](base_path / rel_pickle_file_path)
+        factorization = alg_dict[algorithm](base_path / rel_pickle_file_path)
 
-    write_dir = (result_directory / rel_pickle_file_path.parent).resolve()
-    makedirs(write_dir, exist_ok=True)
+        write_dir = (result_directory / rel_pickle_file_path.parent).resolve()
+        makedirs(write_dir, exist_ok=True)
 
-    ed = [len(x) for x in factorization]
+        ed = [len(x) for x in factorization]
 
-    with open((write_dir / rel_pickle_file_path.name).resolve(), 'wb') as file:
-        pickle.dump({
-            'factorization': factorization,
-            'edit_distances': ed,
-            'max': max(ed + [0])
-        }, file)
+        with open((write_dir / rel_pickle_file_path.name).resolve(), 'wb') as file:
+            pickle.dump({
+                'factorization': factorization,
+                'edit_distances': ed,
+                'max': max(ed + [0])
+            }, file)
+
+    except Exception as e:
+        print(f"An exception occurred while computing the edit distance for response {rel_pickle_file_path}!\n "
+              f"Exception message: {e}")
 
 

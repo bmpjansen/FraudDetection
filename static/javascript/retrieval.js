@@ -118,10 +118,19 @@ function updateQidOptions() {
     const eid = eidSelect.value;
     let qids;
 
+    eidSelect.disabled = false
+    qidSelect.disabled = false
+
     if (aid === "all") {
         qids = Object.values(namesTree).flatMap(a => Object.values(a).flatMap(Object.keys));
+        eidSelect.value = "all"
+        eidSelect.disabled = true
+        qidSelect.value = "all"
+        qidSelect.disabled = true
     } else if (eid === "all") {
         qids = Object.values(namesTree[aid] || {}).flatMap(Object.keys);
+        qidSelect.value = "all"
+        qidSelect.disabled = true
     } else {
         qids = Object.keys(namesTree[aid]?.[eid] || {});
     }
@@ -132,9 +141,6 @@ function updateQidOptions() {
 function qidChange() {
     const names = [aidSelect.value, eidSelect.value, qidSelect.value];
     const out = [];
-
-    console.log(`nameIdList: ${nameIdList}`)
-    console.log(nameIdList)
 
     for (let i = 0; i < names.length; i++) {
         if (names[i] === 'all') {

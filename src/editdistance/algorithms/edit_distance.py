@@ -80,12 +80,22 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
         if algorithm not in alg_dict:
             raise RuntimeError(f"Unknown algorithm: {algorithm}")
 
-        factorization = alg_dict[algorithm](base_path / rel_pickle_file_path)
+        try:
+            factorization = alg_dict[algorithm](base_path / rel_pickle_file_path)
+        
+        except Exception as e:
+            print(f"The factorization algorithm produced an error! The input file was determined via {base_path} and {rel_pickle_file_path}")
+            raise e
 
         write_dir = (result_directory / rel_pickle_file_path.parent).resolve()
         makedirs(write_dir, exist_ok=True)
 
-        ed = [len(x) for x in factorization]
+        try:
+            ed = [len(x) for x in factorization]
+           
+        except Exception as e:
+            ed = [0]
+            print(f"An exception occurred when trying to list the factorization counts! Fall-back to [0]. Exception: {e}")
 
         with open((write_dir / rel_pickle_file_path.name).resolve(), 'wb') as file:
             pickle.dump({
@@ -101,4 +111,3 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
     add_to_running_jobs(-1)
 
     logger.info(f"Completed response {rel_pickle_file_path.stem}. Number of remaining jobs: {n_running_jobs}")
-

@@ -82,20 +82,31 @@ def compute_suffix_array(pickle_file_path: Path) -> list[list[int]]:
              Example: snapshots = [A, B, C] will be concatenated as A$1B$2C,
              where $1 and $2 are unique separation characters.
     """
-    word, separation_indices = util.get_word_from_file(pickle_file_path)
-    n = len(word)
+    try:
+        word, separation_indices = util.get_word_from_file(pickle_file_path)
 
-    if n == 0:
+        n = len(word)
+
+        if n == 0:
+            return []
+    
+    except Exception as e:
+        print(f"Exception when parsing input from pickle to prepare for edit distance computation. The exception is {e}. Treating as empty.")
         return []
 
-    sa = improved_suffix_array(word, n)
-    lcp = compute_lcp(word, sa, n)
+    try:
+        sa = improved_suffix_array(word, n)
+        lcp = compute_lcp(word, sa, n)
 
-    del word
+        del word
 
-    lpf = lz77.compute_lpf(sa, lcp, n, in_place=True)
+        lpf = lz77.compute_lpf(sa, lcp, n, in_place=True)
 
-    lz = lz77.compute_lz(lpf, n, separation_indices)
+        lz = lz77.compute_lz(lpf, n, separation_indices)
+    except Exception as e:
+        print(f"Exception in compute_suffix_array. The exception was {e}. The input was {word} and {separation_indices}.")
+        
+        raise e
 
     return lz
 

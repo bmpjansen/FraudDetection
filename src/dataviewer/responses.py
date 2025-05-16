@@ -1,5 +1,7 @@
 import html
 import logging
+import traceback
+
 from os import makedirs
 import pickle
 from datetime import datetime
@@ -43,6 +45,7 @@ _response_tree: dict = {}
 _edit_distance_tree: dict = {}
 _names_tree: dict = {}
 _names_ids_list: list = {}
+_num_versions_tree: dict = {}
 
 _result_dir: Path
 _response_dir: Path
@@ -66,7 +69,7 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     :param user_dir: the root directory of remaining files
     """
     global _user_dir, _response_tree, _edit_distance_tree, _names_tree, _names_ids_list, \
-        _result_dir, _response_dir,  _executor
+        _result_dir, _response_dir,  _executor, _num_versions_tree
 
     _user_dir = user_dir
     makedirs(user_dir, exist_ok=True)
@@ -74,7 +77,7 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
     _response_dir = response_dir
     _result_dir = results_dir
 
-    _response_tree, _edit_distance_tree, _names_tree, _names_ids_list = construct_trees(response_dir)
+    _response_tree, _edit_distance_tree, _names_tree, _names_ids_list, _num_versions_tree = construct_trees(response_dir)
 
     logger.debug(_response_tree)
 
@@ -96,6 +99,7 @@ def init(response_dir: Path, results_dir: Path, user_dir: Path, ex: Executor):
 def construct_trees(response_dir: Path) -> tuple[dict, dict, dict, list]:
     tree = {}
     ed_tree = {}
+    versions_tree = {}
     names_ids_list = [{}, {}, {}]
     names_tree = {}
 
@@ -110,6 +114,7 @@ def construct_trees(response_dir: Path) -> tuple[dict, dict, dict, list]:
         if as_id not in tree:
             tree[as_id] = {}
             ed_tree[as_id] = {}
+            versions_tree[as_id] = {}
             as_name = str(as_id)
             if (response_dir / str(as_id) / 'name.txt').exists():
                 with open(response_dir / str(as_id) / 'name.txt', 'r') as file:
@@ -120,6 +125,7 @@ def construct_trees(response_dir: Path) -> tuple[dict, dict, dict, list]:
         if ex_id not in tree[as_id]:
             tree[as_id][ex_id] = {}
             ed_tree[as_id][ex_id] = {}
+            versions_tree[as_id][ex_id] = {}
             ex_name = str(ex_id)
             if (response_dir / str(as_id) / str(ex_id) / 'name.txt').exists():
                 with open(response_dir / str(as_id) / str(ex_id) / 'name.txt', 'r') as file:
@@ -130,6 +136,7 @@ def construct_trees(response_dir: Path) -> tuple[dict, dict, dict, list]:
         if q_id not in tree[as_id][ex_id]:
             tree[as_id][ex_id][q_id] = []
             ed_tree[as_id][ex_id][q_id] = {}
+            versions_tree[as_id][ex_id][q_id] = {}
             q_name = str(q_id)
             if (response_dir / str(as_id) / str(ex_id) / str(q_id) / 'name.txt').exists():
                 with open(response_dir / str(as_id) / str(ex_id) / str(q_id) / 'name.txt', 'r') as file:
@@ -137,10 +144,12 @@ def construct_trees(response_dir: Path) -> tuple[dict, dict, dict, list]:
             names_ids_list[2][q_name] = q_id
             names_tree[as_name][ex_name][q_name] = {}
 
-        ed_tree[as_id][ex_id][q_id][resp_id] = _read_file(_result_dir, [as_id, ex_id, q_id, resp_id], ED_DEFAULT)["max"]
+        resultdata = _read_file(_result_dir, [as_id, ex_id, q_id, resp_id], ED_DEFAULT)
+        ed_tree[as_id][ex_id][q_id][resp_id] = resultdata["max"]
+        versions_tree[as_id][ex_id][q_id][resp_id] = len(resultdata["edit_distances"])
         tree[as_id][ex_id][q_id].append(resp_id)
 
-    return tree, ed_tree, names_tree, names_ids_list
+    return tree, ed_tree, names_tree, names_ids_list, versions_tree
 
 
 def _update_current_index(new_index: int):
@@ -283,6 +292,28 @@ def get_nr_responses() -> int:
     return len(_response_ids)
 
 
+def get_num_versions() -> list[int]:
+    if _response_ids is None or len(_response_ids) == 0:
+    	return [0]
+    else:
+        num_versions_array = []
+    
+        for id in _response_ids:
+            num_versions_array.append(_num_versions_tree[id[0]][id[1]][id[2]][id[3]])
+    
+        return num_versions_array
+
+def get_all_max_edit_distances() -> list[int]:
+    if _response_ids is None or len(_response_ids) == 0:
+    	return [0]
+    else:
+        max_edit_distances_array = []
+    
+        for id in _response_ids:
+            max_edit_distances_array.append(_edit_distance_tree[id[0]][id[1]][id[2]][id[3]])
+    
+        return max_edit_distances_array
+
 def get_index():
     return _current_response_index
 
@@ -323,6 +354,8 @@ def set_active_set(ids: list[int|str]):
 
 
 def _find_all_response_ids(ids: list[int], tree: dict | list = None, index: int = 0) -> list[list[int]]:
+    logger.info(f"Finding all responses for {ids}, current value of index is {index}.")
+
     if ids is None:
         return []
 
@@ -335,7 +368,8 @@ def _find_all_response_ids(ids: list[int], tree: dict | list = None, index: int 
 
     # otherwise, walk one node down
     if ids[index] not in tree:
-        raise ValueError(f"Could not find id: {ids[index]}! Tree {tree}")
+        traceback.print_exc()
+        raise ValueError(f"Could not find id: {ids[index]}! Stopped finding all responses. Queried to find all response ids for {ids}")
 
     else:
         return _find_all_response_ids(ids, tree[ids[index]], index + 1)
@@ -366,6 +400,8 @@ def _get_all_leaves(tree: dict[int, dict | list] | list[int], prefix: list[int])
 def reset_response_ids(new_ids: list[list[int]]):
     global _response_ids
     _response_ids = new_ids
+
+    print('resetting response ids to a list of size ' + str(len(_response_ids)))
 
     if len(_response_ids) > 0:
         _update_current_index(0)

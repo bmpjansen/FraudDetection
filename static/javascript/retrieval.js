@@ -85,6 +85,7 @@ function getIdTree() {
 
 
 function processNamesTree(data) {
+	console.log("Processing names tree")
     console.log(data)
     namesTree = data[0];
     nameIdList = data[1];
@@ -94,14 +95,26 @@ function processNamesTree(data) {
     qidSelect = document.getElementById("qidSelect");
 
     populateSelect(aidSelect, Object.keys(namesTree));
+
+    // populateSelect(aidSelect, nameIdList[0]);
     updateEidOptions();
 }
 
 
 function populateSelect(select, options) {
+	console.log("Populating select with value of select as:");
+	console.log(select);
+	console.log("and value of options as");
+	console.log(options);
+
     select.innerHTML = "";
     select.appendChild(new Option("All", "all"));
     options.forEach(option => select.appendChild(new Option(option, option)));
+/*
+	options.forEach((optionName, optionId) => {
+	  select.appendChild(new Option(optionName, optionId));
+	});
+*/
     select.value = 'all';
 }
 
@@ -142,6 +155,8 @@ function qidChange() {
     const names = [aidSelect.value, eidSelect.value, qidSelect.value];
     const out = [];
 
+	// Careful here. We are mapping items in the selection dropdown to IDs based on a name match, but there could be multiple pieces with the same name!
+	// Could we populate the 'value' parameter of the HTML with the index of the question instead?
     for (let i = 0; i < names.length; i++) {
         if (names[i] === 'all') {
             break;

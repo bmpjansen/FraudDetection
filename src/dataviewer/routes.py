@@ -45,12 +45,18 @@ def construct_info(max_ed: float = None,
     if todo_html is None:
         todo_html = responses.get_html()
 
+    num_versions = responses.get_num_versions()
+
+    all_max_edit_distances = responses.get_all_max_edit_distances()
+
     return jsonify({
         "index": resp_index,
         "n_responses": n_responses,
         "rid": rid,
         "max_ed": int(max_ed),
-        "html": todo_html
+        "html": todo_html,
+        "num_versions": num_versions,
+        "all_max_edit_distances": all_max_edit_distances
     })
 
 
@@ -133,6 +139,7 @@ def get_names_tree():
 def set_active_set():
     data = request.get_json()
     try:
+        logger.info(f"Setting active set to {data}")
         responses.set_active_set(data)
         return construct_info(), 200
     except (FileNotFoundError, ValueError) as e:

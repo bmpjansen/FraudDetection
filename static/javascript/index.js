@@ -31,24 +31,52 @@ function processInfo(data) {
 
     fetchHistory()
 
-    // Scatter plot
-    if (data['scatter'] === undefined || data['scatter'] === "unavailable") {
-        document.getElementById("scatter_div").innerHTML = ""
-    } else {
-        document.getElementById("scatter_div").innerHTML = `<img src=${data['scatter']} alt="Scatter plot"> `
-    }
+	// Plot of the number of versions
+    if (data['num_versions'] === undefined || data['num_versions'] === "unavailable") {
+        document.getElementById("box_plot_div").innerHTML = "Histogram of number of submitted versions unavailable"
+	} else {
+		document.getElementById("box_plot_div").innerHTML = ""
+		renderHistogram(data['num_versions'], "box_plot_div", "#versions for " + document.getElementById("eidSelect").value + " #" + document.getElementById("qidSelect").selectedIndex)
+	}
 
-    // Box plot
-    if (data['box_plot'] === undefined || data['box_plot'] === "unavailable") {
-        document.getElementById("box_plot_div").innerHTML = ""
-    } else {
-        document.getElementById("box_plot_div").innerHTML = `<img src=${data['box_plot']} alt="Box plot"> `
-    }
+	// Plot of the number of versions
+    if (data['all_max_edit_distances'] === undefined || data['all_max_edit_distances'] === "unavailable") {
+        document.getElementById("ed_histogram_div").innerHTML = "Histogram of maximum edit distances unavailable"
+	} else {
+		document.getElementById("ed_histogram_div").innerHTML = ""
+		renderHistogram(data['all_max_edit_distances'], "ed_histogram_div", "max. edit distances for " + document.getElementById("eidSelect").value + " #" + document.getElementById("qidSelect").selectedIndex)
+	}
 
     // table
     if (data["csv"] !== undefined) {
         $('#CSVTable').CSVToTable(data["csv"]);
     }
+}
+
+function renderHistogram(num_versions, targetElementID, histogramTitle) {
+	const data = [{
+		x: num_versions,
+		type: 'histogram',
+		marker: {
+			color: 'rgba(100, 150, 250, 0.7)',
+			line: {
+				color: 'rgba(0, 0, 0, 1)',
+				width: 1
+			},
+		}
+	}];
+
+	const layout = {
+		title: histogramTitle,
+		xaxis: { title: 'Value' },
+		yaxis: { title: 'Frequency' },
+		bargap: 0.05,
+		width: 1200,
+		height: 600
+	};
+
+	// Write the plot to the 'scatter_div' div element in the HTML template.
+	Plotly.newPlot(targetElementID, data, layout);
 }
 
 function processSpecificResponse(data) {

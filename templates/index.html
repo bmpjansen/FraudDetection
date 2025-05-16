@@ -9,6 +9,8 @@
           href="/static/css/style.css">
     <title>Version History</title>
 
+	<!-- Include Plotly.js -->
+	<script src="/static/javascript/plotly.js"></script>
     <script src="/static/javascript/retrieval.js"></script>
     <script src="/static/javascript/history.js"></script>
     <script src="/static/javascript/index.js"></script>
@@ -85,9 +87,9 @@
                     </div>
                 </section>
 
-                <div id="Plot div" style="display: flex">
-                    <div id="scatter_div"></div>
-                    <div id="box_plot_div"></div>
+                <div id="Plot div" style="width: 800px; height: 600px;">
+                    <span id="ed_histogram_div" style="width: 800px; height: 600px;"></span>
+                    <span id="box_plot_div" style="width: 800px; height: 600px;"></span>
                 </div>
 
                 <div id="CSVTable"></div>

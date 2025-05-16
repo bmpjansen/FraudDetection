@@ -130,7 +130,49 @@ class AnsResponseFetcher:
 
             filename = 'name.txt'
 
-            def retrieve(url, filepath, key):
+            assignmentyear = "[YEAR]"
+
+            # Fetch the year in which the assignment was used, to append to the name
+            try:
+                self._wait_if_required()
+                assignment_info_url = f"{base_url}/assignments/{as_id}"
+                response = requests.get(assignment_info_url, headers=self.request_header)
+                self.last_request_time = time.time()
+                
+                # if we receive HTTP 429 (Too many requests), wait before retrying
+                if response.status_code == 429:
+                    logger.warning("Got back HTTP 429; sleeping for 30 seconds...")
+                    time.sleep(30)
+                    return
+
+                elif response.status_code == 200:
+                    resp_json = response.json()
+
+                    self._wait_if_required()
+                    course_id = resp_json['course_id']
+                    course_info_url = f"{base_url}/courses/{course_id}"
+                    courseresponse = requests.get(course_info_url, headers=self.request_header)
+                    self.last_request_time = time.time()
+
+                    if courseresponse.status_code == 200:
+                        cresp_json = courseresponse.json()
+
+                        if str(cresp_json['course_code']) != "None":
+                            assignmentyear = " (" + str(cresp_json['year']) + " " + str(cresp_json['course_code']) + ")"
+
+                        else:
+                            assignmentyear = " (" + str(cresp_json['year']) + ")"
+                        
+                    else:
+                        logger.warn(f"Unknown status code in second stage while retrieving year for course {course_id}. Code: {courseresponse.status_code}")
+                
+                else:
+                    logger.warn(f"Unknown status code while retrieving year for assignment {as_id}. Code: {response.status_code}")
+
+            except Exception as e:
+                logger.warn(f"Exception while retrieving year for assignment {as_id}. Exception: {e}")
+
+            def retrieve(url, filepath, key, uniqueID):
                 try:
                     if not filepath.exists():
                         self._wait_if_required()
@@ -146,22 +188,23 @@ class AnsResponseFetcher:
                         if response.status_code == 200:
                             resp_json = response.json()
                             with open(filepath, 'w') as file:
-                                file.write(str(resp_json[key]))
+                                # Write the name, append the ID of the relevant object to make them unique. This is necessary to parse the dropdowns unambiguously.
+                                file.write(str(resp_json[key]) + assignmentyear + " [" + uniqueID + "]")
 
                 except Exception as e:
                     logger.warn(f"Exception while retrieve name for {filepath.parent.relative_to(response_dir)}. Exception: {e}")
 
             retrieve(url=f"{base_url}/assignments/{as_id}",
                      filepath=response_dir / str(as_id) / filename,
-                     key='name')
+                     key='name', uniqueID=str(as_id))
 
             retrieve(url=f"{base_url}/exercises/{ex_id}",
                      filepath=response_dir / str(as_id) / str(ex_id) / filename,
-                     key='name')
+                     key='name', uniqueID=str(ex_id))
 
             retrieve(url=f"{base_url}/questions/{q_id}",
                      filepath=response_dir / str(as_id) / str(ex_id) / str(q_id) / filename,
-                     key='position')
+                     key='position', uniqueID=str(q_id))
 
         logger.info("Retrieved all names.")
 
@@ -399,6 +442,8 @@ class AnsResponseFetcher:
                         failed.append(submission_ids)
                         continue
                     logger.info(f"   Retrieved result {result_id}.")
+
+                    # TODO: Make sure we only retrieve data for open-ended and pseudocode questions. We want category = open or code from /api/v2/questions/id . A "submission" object knows the exercise_id and question_id.
 
                     for submission_id in submission_ids:
                         if stop_event.is_set():

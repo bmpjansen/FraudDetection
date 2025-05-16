@@ -1,6 +1,6 @@
 # Fraud detection program
 A program to assist teachers in detection plagiarized answers for assignments given on [ans.app](https://www.ans.app/). 
-This program was created for my master thesis.
+This program was created in a master thesis.
 
 This program is very early and misses features. 
 Some processes might not work ideally (e.g. having to check the backend console for progress reports)
@@ -16,8 +16,8 @@ To run to program you need to following programs:
 1. Open a terminal (or cmd if on Windows).
 2. Clone this repo.
     ```
-    git clone https://github.com/ValentijnvdB/Fraud_Detection_Program.git
-    cd ./Fraud_Detection_Program
+    git clone https://github.com/bmpjansen/FraudDetection.git
+    cd ./FraudDetection
     ```
 3. Create and activate a virtual environment (optional, but recommended).
     ```

@@ -76,6 +76,7 @@ def print_http_error_message(e: requests.HTTPError | requests.exceptions.HTTPErr
     logger.error(f"HTTP Error: {e.response.status_code} -> {msg}.\n"
                  f"    while fetching '{url}'.\n"
                  f"    The path was: '{path}'.\n"
+                 f"    The ids were: '{ids}'.\n"
                  f"    {extra}")
 
     return path

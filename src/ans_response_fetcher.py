@@ -2,6 +2,7 @@ import pickle
 from pathlib import Path
 from queue import Queue
 from threading import Event
+from typing import List, Tuple
 
 import requests
 import os
@@ -114,6 +115,12 @@ class AnsResponseFetcher:
         self.request_header = {
             'Authorization': f"Bearer {api_key}"
         }
+        # Cache for question categories to avoid redundant API calls
+        # Maps question_id -> category (e.g., "open", "code", "multiple_choice", etc.)
+        self._question_category_cache: dict[int, str] = {}
+        # Categories that indicate open-ended questions we want to analyze
+        # These can be found at https://ans.app/api/docs/v2/swagger.yaml (ctrl+f "description: An open question" to jump to the relevant section)
+        self.OPEN_QUESTION_CATEGORIES = {"open", "code"}
 
     def fetch_unknown_names(self, response_dir: Path, base_url: str):
 
@@ -264,6 +271,50 @@ class AnsResponseFetcher:
             time_to_sleep = self.DELAY - time_diff
             logger.debug(f"Sleeping for {time_to_sleep} seconds...")
             time.sleep(time_to_sleep)
+
+    def _is_open_question(self, base_url: str, question_id: int) -> bool:
+        """
+        Check if a question is an open-ended question (category is 'open' or 'code').
+        Results are cached to avoid redundant API calls.
+
+        :param base_url: the base URL of the API
+        :param question_id: the ID of the question to check
+        :return: True if the question is open-ended, False otherwise
+        """
+        # Return cached result if available
+        if question_id in self._question_category_cache:
+            category = self._question_category_cache[question_id]
+            return category in self.OPEN_QUESTION_CATEGORIES
+
+        # Fetch question details from API
+        try:
+            self._wait_if_required()
+            url = f"{base_url}/questions/{question_id}"
+            response = requests.get(url, headers=self.request_header)
+            self.last_request_time = time.time()
+
+            # Handle rate limiting
+            if response.status_code == 429:
+                logger.warning("Got back HTTP 429; retrying later...")
+                time.sleep(1)
+                # Retry after waiting
+                return self._is_open_question(base_url, question_id)
+
+            if response.status_code == 200:
+                resp_json = response.json()
+                category = resp_json.get("category", "")
+                # Cache the result
+                self._question_category_cache[question_id] = category
+                is_open = category in self.OPEN_QUESTION_CATEGORIES
+                logger.debug(f"Question {question_id} has category '{category}', is_open={is_open}")
+                return is_open
+            else:
+                logger.warning(f"Failed to fetch question {question_id}, status code: {response.status_code}. Assuming not open.")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Exception while checking question category for {question_id}: {e}. Assuming not open.")
+            return False
 
     def _fetch_and_write(self, url: str, path: str | Path, header: dict, ids: list, has_pages: bool = False,
                          get_ids: bool = True, interested_in: str = None,
@@ -448,8 +499,6 @@ class AnsResponseFetcher:
                         continue
                     logger.info(f"   Retrieved result {result_id}.")
 
-                    # TODO: Make sure we only retrieve data for open-ended and pseudocode questions. We want category = open or code from /api/v2/questions/id . A "submission" object knows the exercise_id and question_id.
-
                     # Collect all response paths for this (assignment_id, result_id) pair
                     result_response_paths = []
 
@@ -476,6 +525,11 @@ class AnsResponseFetcher:
                             failed.append(response_ids)
                             continue
                         logger.info(f"      Retrieved submission {submission_id}.")
+
+                        # Filter to the question types we want
+                        if current_question != -1 and not self._is_open_question(base_url, current_question):
+                            logger.info(f"      Skipping submission {submission_id} - question {current_question} is not an open/code question.")
+                            continue
 
                         for response_id in response_ids:
                             if stop_event.is_set():

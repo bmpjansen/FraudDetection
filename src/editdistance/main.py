@@ -9,7 +9,7 @@ from threading import Event, Thread, Lock
 from flask_executor import Executor
 from numpy import max
 
-from .algorithms.edit_distance import compute_edit_distances, add_to_running_jobs
+from .algorithms.edit_distance import compute_edit_distances, compute_edit_distances_batch, add_to_running_jobs
 
 
 # author: Valentijn van den Berg
@@ -49,13 +49,20 @@ def start(executor: Executor, result_directory: Path, stop_event: Event, job_que
             if stop_event.is_set():
                 break
 
-            time.sleep(10)
+            time.sleep(1)
             continue
 
-        logger.debug(f"Got new job: {new_job['rel_file_path']}")
-
-        # Submit the task to Flask-Executor
-        add_to_running_jobs(1)
-        executor.submit(compute_edit_distances, 'improved', new_job['base_path'], new_job['rel_file_path'], result_directory)
+        # Check if this is a batch job or single file job
+        if 'response_paths' in new_job:
+            # Batch job for (assignment_id, result_id)
+            logger.debug(f"Got batch job: assignment {new_job.get('assignment_id')}, result {new_job.get('result_id')}, {len(new_job['response_paths'])} responses")
+            add_to_running_jobs(1)
+            executor.submit(compute_edit_distances_batch, 'improved', new_job['response_paths'][0]['base_path'], 
+                          new_job['response_paths'], result_directory)
+        else:
+            # Single file job
+            logger.debug(f"Got new job: {new_job['rel_file_path']}")
+            add_to_running_jobs(1)
+            executor.submit(compute_edit_distances, 'improved', new_job['base_path'], new_job['rel_file_path'], result_directory)
 
 

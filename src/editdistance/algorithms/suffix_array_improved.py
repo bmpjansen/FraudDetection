@@ -110,3 +110,37 @@ def compute_suffix_array(pickle_file_path: Path) -> list[list[int]]:
 
     return lz
 
+
+def compute_suffix_array_from_word(word: str, separation_indices: list[int]) -> list[list[int]]:
+    """
+    Compute the lz compression from a pre-processed word and separation indices.
+    This is used for batch processing where snapshots are already sorted and concatenated.
+    
+    :param word: The concatenated word containing all snapshots
+    :param separation_indices: The indices where snapshots are separated
+    :return: the Lempel-Ziv compression of the concentrated snapshots with separating characters.
+    """
+    try:
+        n = len(word)
+
+        if n == 0:
+            return []
+    
+    except Exception as e:
+        print(f"Exception when processing word for edit distance computation. The exception is {e}. Treating as empty.")
+        return []
+
+    try:
+        sa = improved_suffix_array(word, n)
+        lcp = compute_lcp(word, sa, n)
+
+        lpf = lz77.compute_lpf(sa, lcp, n, in_place=True)
+
+        lz = lz77.compute_lz(lpf, n, separation_indices)
+    except Exception as e:
+        print(f"Exception in compute_suffix_array_from_word. The exception was {e}.")
+        
+        raise e
+
+    return lz
+

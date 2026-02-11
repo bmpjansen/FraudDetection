@@ -5,7 +5,7 @@ from pathlib import Path
 import logging
 from threading import Lock
 
-from . import suffix_array_naive, suffix_array_improved
+from . import suffix_array_naive, suffix_array_improved, util
 
 
 # author: Valentijn van den Berg
@@ -111,3 +111,106 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
     add_to_running_jobs(-1)
 
     logger.info(f"Completed response {rel_pickle_file_path.stem}. Number of remaining jobs: {n_running_jobs}")
+
+
+def compute_edit_distances_batch(algorithm: str, base_path: Path, response_paths: list, result_directory: Path) -> None:
+    """
+    Compute the edit distance for a batch of responses from the same (assignment_id, result_id).
+    All snapshots are sorted by timestamp and processed together, but results are mapped back to individual questions.
+    
+    :param algorithm: the algorithm to use
+    :param base_path: the root path of the data
+    :param response_paths: list of dicts with 'base_path' and 'rel_file_path' keys
+    :param result_directory: where to store the results
+    """
+    global n_running_jobs
+    
+    if not response_paths:
+        logger.warning("Empty response_paths list, skipping batch")
+        add_to_running_jobs(-1)
+        return
+    
+    logger.info(f"Computing edit distance for batch of {len(response_paths)} responses")
+    
+    try:
+        if algorithm != "improved":
+            raise RuntimeError(f"Batch processing only supports 'improved' algorithm, got: {algorithm}")
+        
+        # Extract and sort all snapshots across all questions
+        word, separation_indices, snapshot_metadata = util.extract_all_snapshots_sorted(
+            response_paths, base_path, remove_html=True
+        )
+        
+        if len(word) == 0:
+            logger.warning("No snapshots found in batch, skipping")
+            # Still write empty results for each question
+            for response_info in response_paths:
+                rel_path = Path(response_info['rel_file_path'])
+                write_dir = (result_directory / rel_path.parent).resolve()
+                makedirs(write_dir, exist_ok=True)
+                with open((write_dir / rel_path.name).resolve(), 'wb') as file:
+                    pickle.dump({
+                        'factorization': [],
+                        'edit_distances': [0],
+                        'max': 0
+                    }, file)
+            add_to_running_jobs(-1)
+            return
+        
+        # Compute LZ factorization
+        try:
+            factorization = suffix_array_improved.compute_suffix_array_from_word(word, separation_indices)
+        except Exception as e:
+            print(f"The factorization algorithm produced an error! Exception: {e}")
+            raise e
+        
+        # Map results back to individual questions
+        # Group snapshots by question path
+        question_snapshots = {}
+        for idx, metadata in enumerate(snapshot_metadata):
+            question_path = metadata['question_path']
+            if question_path not in question_snapshots:
+                question_snapshots[question_path] = []
+            question_snapshots[question_path].append({
+                'global_index': idx,
+                'snapshot_index': metadata['snapshot_index'],
+                'factorization': factorization[idx] if idx < len(factorization) else []
+            })
+        
+        # Write results for each question
+        for response_info in response_paths:
+            rel_path_str = Path(response_info['rel_file_path']).as_posix()  # Normalize for comparison
+            rel_path = Path(response_info['rel_file_path'])
+            
+            # Get snapshots for this question
+            if rel_path_str not in question_snapshots:
+                # No snapshots for this question, write empty result
+                question_factorizations = []
+                question_edit_distances = [0]
+            else:
+                # Sort by snapshot_index to maintain original order
+                question_snapshots_sorted = sorted(question_snapshots[rel_path_str], 
+                                                  key=lambda x: x['snapshot_index'])
+                question_factorizations = [s['factorization'] for s in question_snapshots_sorted]
+                question_edit_distances = [len(f) for f in question_factorizations]
+            
+            write_dir = (result_directory / rel_path.parent).resolve()
+            makedirs(write_dir, exist_ok=True)
+            
+            with open((write_dir / rel_path.name).resolve(), 'wb') as file:
+                pickle.dump({
+                    'factorization': question_factorizations,
+                    'edit_distances': question_edit_distances,
+                    'max': max(question_edit_distances + [0])
+                }, file)
+        
+        logger.info(f"Completed batch of {len(response_paths)} responses")
+        
+    except Exception as e:
+        print(f"An exception occurred while computing edit distance for batch!\n "
+              f"Exception message: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    add_to_running_jobs(-1)
+    logger.info(f"Number of remaining jobs: {n_running_jobs}")

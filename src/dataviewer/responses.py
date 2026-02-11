@@ -210,15 +210,34 @@ def get_history() -> dict[str, list]:
 
     if _should_strip_html():
         if _show_edbo_phrases:
-            factorizations = [[]] + _current_eds_info['factorization']
+            # _current_eds_info['factorization'] contains one entry per snapshot WITH valid content
+            # We need to align factorizations with content entries that have valid content
+            raw_factorizations = _current_eds_info['factorization'] if _current_eds_info else []
+            
+            # Build factorizations list aligned with content indices
+            # The factorization algorithm skips snapshots with None content
+            factorizations = []
+            fact_idx = 0
+            for version in content:
+                has_content = ("changes" in version 
+                               and "content" in version["changes"] 
+                               and version["changes"]["content"] is not None)
+                if has_content and fact_idx < len(raw_factorizations):
+                    factorizations.append(raw_factorizations[fact_idx])
+                    fact_idx += 1
+                else:
+                    # No content or no factorization available - use empty
+                    factorizations.append([])
         else:
             factorizations = [None]*len(content)
 
-        for version, factorization in zip(content, factorizations):
+        # Process each snapshot: strip HTML and apply phrase colors
+        for (version, factorization) in zip(content, factorizations):
             if "changes" in version and "content" in version["changes"] and version["changes"]["content"] is not None:
                 version["changes"]["content"] = BeautifulSoup(version["changes"]["content"], 'lxml').get_text()
-
-                if _show_edbo_phrases and len(factorization) > 0:
+                
+                # Apply phrase coloring if enabled and factorization is available
+                if _show_edbo_phrases and factorization and len(factorization) > 0:
                     version["changes"]["content"] = _process_phrase_colors(version["changes"]["content"], factorization)
 
     elif _should_escape_html():
@@ -244,6 +263,9 @@ def _process_phrase_colors(text: str, factorization: list[int]):
     i, c = 0, 0
     old_text = text
     new_text = "<p>"
+    fact_sum = sum(factorization) if factorization else 0
+    text_len = len(text)
+    
     for length in factorization:
         j = max(length, 1)
         if length == 0:
@@ -255,6 +277,17 @@ def _process_phrase_colors(text: str, factorization: list[int]):
         match = old_text[i:i + j]
         new_text += f"<span style='background-color:{color}'>{match}</span>"
         i += j
+    
+    # Check if we processed all text to detect problems
+    if i < text_len:
+        logger.debug(f"_process_phrase_colors: Not all text processed! i={i}, text_len={text_len}, "
+              f"fact_sum={fact_sum}, remaining='{text[i:]}'")
+        # Append remaining text as unmatched (red background). THIS SHOULD NOT HAPPEN NORMALLY.
+        remaining = text[i:]
+        new_text += f"<span style='background-color:#f1948a'>{remaining}</span>"
+    elif i > text_len:
+        logger.debug(f"_process_phrase_colors: Processed beyond text! i={i}, text_len={text_len}, fact_sum={fact_sum}")
+    
     return new_text + '</p>'
 
 

@@ -2,6 +2,7 @@ import pickle
 from pathlib import Path
 from queue import Queue
 from threading import Event
+from typing import List, Tuple
 
 import requests
 import os
@@ -114,6 +115,12 @@ class AnsResponseFetcher:
         self.request_header = {
             'Authorization': f"Bearer {api_key}"
         }
+        # Cache for question categories to avoid redundant API calls
+        # Maps question_id -> category (e.g., "open", "code", "multiple_choice", etc.)
+        self._question_category_cache: dict[int, str] = {}
+        # Categories that indicate open-ended questions we want to analyze
+        # These can be found at https://ans.app/api/docs/v2/swagger.yaml (ctrl+f "description: An open question" to jump to the relevant section)
+        self.OPEN_QUESTION_CATEGORIES = {"open", "code"}
 
     def fetch_unknown_names(self, response_dir: Path, base_url: str):
 
@@ -265,10 +272,54 @@ class AnsResponseFetcher:
             logger.debug(f"Sleeping for {time_to_sleep} seconds...")
             time.sleep(time_to_sleep)
 
+    def _is_open_question(self, base_url: str, question_id: int) -> bool:
+        """
+        Check if a question is an open-ended question (category is 'open' or 'code').
+        Results are cached to avoid redundant API calls.
+
+        :param base_url: the base URL of the API
+        :param question_id: the ID of the question to check
+        :return: True if the question is open-ended, False otherwise
+        """
+        # Return cached result if available
+        if question_id in self._question_category_cache:
+            category = self._question_category_cache[question_id]
+            return category in self.OPEN_QUESTION_CATEGORIES
+
+        # Fetch question details from API
+        try:
+            self._wait_if_required()
+            url = f"{base_url}/questions/{question_id}"
+            response = requests.get(url, headers=self.request_header)
+            self.last_request_time = time.time()
+
+            # Handle rate limiting
+            if response.status_code == 429:
+                logger.warning("Got back HTTP 429; retrying later...")
+                time.sleep(1)
+                # Retry after waiting
+                return self._is_open_question(base_url, question_id)
+
+            if response.status_code == 200:
+                resp_json = response.json()
+                category = resp_json.get("category", "")
+                # Cache the result
+                self._question_category_cache[question_id] = category
+                is_open = category in self.OPEN_QUESTION_CATEGORIES
+                logger.debug(f"Question {question_id} has category '{category}', is_open={is_open}")
+                return is_open
+            else:
+                logger.warning(f"Failed to fetch question {question_id}, status code: {response.status_code}. Assuming not open.")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Exception while checking question category for {question_id}: {e}. Assuming not open.")
+            return False
+
     def _fetch_and_write(self, url: str, path: str | Path, header: dict, ids: list, has_pages: bool = False,
                          get_ids: bool = True, interested_in: str = None,
-                         job_queue: Queue = None, should_queue: bool = False, should_write: bool = False,
-                         stop_event: Event = None) \
+                         job_queue: Queue | None = None, should_queue: bool = False, should_write: bool = False,
+                         stop_event: Event | None = None) \
             -> tuple[bool, list | str, int, int]:
         """
         Send an HTTP(S) request to 'url' with 'header' and saves the result at 'path'
@@ -284,14 +335,16 @@ class AnsResponseFetcher:
         :param should_write: whether to write the output to the file
         :param stop_event: the event to stop sending the request
 
-        :return: Tuple (successful, ids, exercise_id, question_id), where
+        :return: Tuple (successful, ids, exercise_id, question_id, base_path, rel_path), where
                  | *successful*: whether the fetching and writing was successful.
                  | *ids*: list of ids obtained from the fetched json.
                  | *exercise_id*: if the received object contained an exercise_id, it will be returned here. Otherwise, returns -1.
                  | *question_id*: if the received object contained a question_id, it will be returned here. Otherwise, returns -1.
+                 | *base_path*: base path of written file (if written), None otherwise.
+                 | *rel_path*: relative path of written file (if written), None otherwise.
         """
         if stop_event is not None and stop_event.is_set():
-            return False, [], -1, -1
+            return False, [], -1, -1, None, None
 
         try:
             nr_of_pages = 1000000
@@ -301,6 +354,8 @@ class AnsResponseFetcher:
 
             current_exercise = -1
             current_question = -1
+            base_path = None
+            rel_path = None
 
             while cur_page <= nr_of_pages:
 
@@ -341,10 +396,10 @@ class AnsResponseFetcher:
                 # check for odd responses
                 if resp_json is None:
                     logger.warning(f"Got back a None with {url}.")
-                    return []
+                    return False, [], -1, -1, None, None
                 elif len(resp_json) <= 0:
                     logger.warning(f"Got back an empty json object with {url}.")
-                    return []
+                    return False, [], -1, -1, None, None
 
                 # extract the ids that we are interested in
                 if get_ids:
@@ -383,12 +438,12 @@ class AnsResponseFetcher:
 
         except (requests.HTTPError, requests.exceptions.HTTPError) as e:
             path = print_http_error_message(e, url, ids)
-            return False, path, -1, -1
+            return False, path, -1, -1, None, None
         except Exception as e:
             path = print_other_error_message(e, url, ids)
-            return False, path, -1, -1
+            return False, path, -1, -1, None, None
 
-        return True, return_ids, current_exercise, current_question
+        return True, return_ids, current_exercise, current_question, base_path, rel_path
 
     def _main_loops(self, base_url: str,
                     assignment_ids: list[int] | tuple[int],
@@ -421,7 +476,7 @@ class AnsResponseFetcher:
                 logger.info(f"--- Starting retrieval of assignment {assignment_id} ---")
 
                 url = f"{base_url}/assignments/{assignment_id}/results"
-                was_successful, result_ids, _, _ = self._fetch_and_write(url, self.assignment_path, self.request_header,
+                was_successful, result_ids, _, _, _, _ = self._fetch_and_write(url, self.assignment_path, self.request_header,
                                                                          [assignment_id], has_pages=True)
 
                 if not was_successful:
@@ -434,7 +489,7 @@ class AnsResponseFetcher:
                         break
 
                     url = f"{base_url}/results/{result_id}"
-                    was_successful, submission_ids, _, _ = self._fetch_and_write(url, self.result_path,
+                    was_successful, submission_ids, _, _, _, _ = self._fetch_and_write(url, self.result_path,
                                                                                  self.request_header,
                                                                                  [assignment_id, result_id],
                                                                                  interested_in="submissions")
@@ -444,14 +499,15 @@ class AnsResponseFetcher:
                         continue
                     logger.info(f"   Retrieved result {result_id}.")
 
-                    # TODO: Make sure we only retrieve data for open-ended and pseudocode questions. We want category = open or code from /api/v2/questions/id . A "submission" object knows the exercise_id and question_id.
+                    # Collect all response paths for this (assignment_id, result_id) pair
+                    result_response_paths = []
 
                     for submission_id in submission_ids:
                         if stop_event.is_set():
                             break
 
                         url = f"{base_url}/submissions/{submission_id}"
-                        was_successful, response_ids, current_exercise, current_question = (
+                        was_successful, response_ids, current_exercise, current_question, _, _ = (
                             self._fetch_and_write(url,
                                                   self.submission_path,
                                                   self.request_header,
@@ -470,28 +526,49 @@ class AnsResponseFetcher:
                             continue
                         logger.info(f"      Retrieved submission {submission_id}.")
 
+                        # Filter to the question types we want
+                        if current_question != -1 and not self._is_open_question(base_url, current_question):
+                            logger.info(f"      Skipping submission {submission_id} - question {current_question} is not an open/code question.")
+                            continue
+
                         for response_id in response_ids:
                             if stop_event.is_set():
                                 break
 
                             url = f"{base_url}/logs/responses/{response_id}"
-                            was_successful, response, _, _ = self._fetch_and_write(url,
+                            was_successful, response, _, _, base_path, rel_path = self._fetch_and_write(url,
                                                                                    response_path,
                                                                                    self.request_header,
                                                                                    [assignment_id, result_id,
                                                                                     submission_id, response_id],
                                                                                    has_pages=False,
                                                                                    get_ids=False,
-                                                                                   job_queue=job_queue,
-                                                                                   should_queue=True,
+                                                                                   job_queue=None,  # Don't queue individually
+                                                                                   should_queue=False,
                                                                                    should_write=True)
 
                             if not was_successful:
                                 failed.append(response)
                                 continue
 
+                            # Store the path for batch processing
+                            if base_path is not None and rel_path is not None:
+                                result_response_paths.append({
+                                    'base_path': base_path,
+                                    'rel_file_path': rel_path
+                                })
+
                             nr_responses_retrieved += 1
                             logger.info(f"         Retrieved response {response_id}.")
+
+                    # Queue all responses for this (assignment_id, result_id) as a batch
+                    if result_response_paths and job_queue is not None:
+                        job_queue.put({
+                            'assignment_id': assignment_id,
+                            'result_id': result_id,
+                            'response_paths': result_response_paths
+                        })
+                        logger.info(f"   Queued batch of {len(result_response_paths)} responses for assignment {assignment_id}, result {result_id}.")
 
                 logger.info(f"--- Finished assignment {assignment_id} ---")
         except KeyboardInterrupt:

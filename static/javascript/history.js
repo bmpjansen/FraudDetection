@@ -92,7 +92,7 @@ function goToSignificant() {
     }
 
     // found set the version and update the text
-    currentVersion = index+1
+    currentVersion = index
     console.log("Found significant at version " + currentVersion)
 
     setVersionNumber(currentVersion)
@@ -201,16 +201,17 @@ function setVersionNumber(number) {
     setText();
     document.getElementById("version").innerHTML = `${number} / ${nVersions}`
 
-    document.getElementById("next-version").disabled = number === nVersions
-    document.getElementById("final-version").disabled = number === nVersions
+    document.getElementById("next-version").disabled = number >= nVersions
+    document.getElementById("final-version").disabled = number >= nVersions
 
-    document.getElementById("previous-version").disabled = number === 0
-    document.getElementById("first-version").disabled = number === 0
+    document.getElementById("previous-version").disabled = number <= 1
+    document.getElementById("first-version").disabled = number <= 1
 
     if (!editDistances) {
         document.getElementById("edit_distance").innerHTML = ""
     } else {
-        let text = (editDistances[currentVersion-1] === undefined) ? '-' : editDistances[currentVersion-1];
+        let idx = (nVersions === 0) ? 0 : currentVersion;
+        let text = (editDistances[idx] === undefined) ? '-' : editDistances[idx];
 
         document.getElementById("edit_distance").innerHTML = `<b>Edit Distance:</b> ${text}`
     }
@@ -218,7 +219,8 @@ function setVersionNumber(number) {
     if (!timestamps) {
         document.getElementById("timestamp").innerHTML = ""
     } else {
-        const timeDif = timestamps[currentVersion-1]
+        let idx = (nVersions === 0) ? 0 : currentVersion;
+        const timeDif = timestamps[idx]
 
         const days = String(Math.floor(timeDif / (60 * 60 * 24))).padStart(2, '0');
         const hours = String(Math.floor((timeDif % (60 * 60 * 24)) / (60 * 60))).padStart(2, '0');

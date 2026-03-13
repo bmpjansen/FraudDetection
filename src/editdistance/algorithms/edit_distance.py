@@ -91,7 +91,16 @@ def compute_edit_distances(algorithm: str, base_path: Path, rel_pickle_file_path
         makedirs(write_dir, exist_ok=True)
 
         try:
-            ed = [len(x) for x in factorization]
+            # Get the artificial flags from the util
+            _, _, artificial_flags = util.extract_content(pickle.load(open(base_path / rel_pickle_file_path, "rb")))
+            
+            # Distance is the length of factorization, unless it's artificial
+            ed = []
+            for i, x in enumerate(factorization):
+                if i < len(artificial_flags) and artificial_flags[i]:
+                    ed.append(0)
+                else:
+                    ed.append(len(x))
            
         except Exception as e:
             ed = [0]
@@ -192,7 +201,15 @@ def compute_edit_distances_batch(algorithm: str, base_path: Path, response_paths
                 question_snapshots_sorted = sorted(question_snapshots[rel_path_str], 
                                                   key=lambda x: x['snapshot_index'])
                 question_factorizations = [s['factorization'] for s in question_snapshots_sorted]
-                question_edit_distances = [len(f) for f in question_factorizations]
+                
+                # Use metadata to force distance to 0 for artificial snapshots
+                question_edit_distances = []
+                for s in question_snapshots_sorted:
+                    metadata = snapshot_metadata[s['global_index']]
+                    if metadata.get('is_artificial', False):
+                        question_edit_distances.append(0)
+                    else:
+                        question_edit_distances.append(len(s['factorization']))
             
             write_dir = (result_directory / rel_path.parent).resolve()
             makedirs(write_dir, exist_ok=True)

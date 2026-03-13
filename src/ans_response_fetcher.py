@@ -297,15 +297,15 @@ class AnsResponseFetcher:
             logger.debug(f"Sleeping for {time_to_sleep} seconds...")
             time.sleep(time_to_sleep)
 
-    def _get_relevant_questions(self, base_url: str, assignment_id: int) -> set[int]:
+    def _get_relevant_questions(self, base_url: str, assignment_id: int) -> dict[int, str | None]:
         """
-        Fetch all exercises and questions for an assignment and return a set of IDs for open questions.
+        Fetch all exercises and questions for an assignment and return a mapping of IDs to predefined answers.
 
         :param base_url: the base URL of the API
         :param assignment_id: the ID of the assignment to fetch questions for
-        :return: A set of question IDs that are open-ended or code questions
+        :return: A dictionary mapping question IDs to their predefined_answer string (or None)
         """
-        interesting_questions = set()
+        interesting_questions = {}
         logger.info(
             f"Pre-fetching question metadata for assignment {assignment_id}...")
 
@@ -330,7 +330,7 @@ class AnsResponseFetcher:
                     for q in questions:
                         category = q.get("category", "")
                         if category in self.OPEN_QUESTION_CATEGORIES:
-                            interesting_questions.add(q["id"])
+                            interesting_questions[q["id"]] = q.get("predefined_answer")
 
                     cur_page += 1
 
@@ -357,7 +357,7 @@ class AnsResponseFetcher:
                 f"Failed to probe history for response {response_id}: {e}")
             return 0
 
-    def _filter_for_original(self, base_url: str, user_results: list[dict], relevant_questions: set[int]) -> int | None:
+    def _filter_for_original(self, base_url: str, user_results: list[dict], relevant_questions: dict[int, str | None]) -> int | None:
         """
         Identifies the original result among a list of results for the same student.
         """
@@ -421,7 +421,8 @@ class AnsResponseFetcher:
     def _fetch_and_write(self, url: str, path: str | Path, header: dict, ids: list, has_pages: bool = False,
                          get_ids: bool = True, interested_in: str = None,
                          job_queue: Queue | None = None, should_queue: bool = False, should_write: bool = False,
-                         stop_event: Event | None = None) \
+                         stop_event: Event | None = None,
+                         predefined_answer: str | None = None) \
             -> tuple[bool, list | dict | str, int, int, Path | None, Path | None]:
         """
         Send an HTTP(S) request to 'url' with 'header' and saves the result at 'path'
@@ -436,6 +437,7 @@ class AnsResponseFetcher:
         :param should_queue: whether to put the output in the job_queue
         :param should_write: whether to write the output to the file
         :param stop_event: the event to stop sending the request
+        :param predefined_answer: optional predefined answer to insert as the first history state
 
         :return: Tuple (successful, data, exercise_id, question_id, base_path, rel_path), where
                  | *successful*: whether the fetching and writing was successful.
@@ -471,7 +473,7 @@ class AnsResponseFetcher:
 
                 # update total number of pages
                 if has_pages:
-                    nr_of_pages = int(resp_headers["Total-Pages"])
+                    nr_of_pages = int(resp_headers.get("Total-Pages", 1))
                 else:
                     nr_of_pages = 1
 
@@ -483,6 +485,25 @@ class AnsResponseFetcher:
                     logger.warning(
                         f"Got back an empty json object with {url}.")
                     return False, [], -1, -1, None, None
+
+                # add result id to json
+                if len(ids) > 2:
+                    if isinstance(resp_json, list) and len(resp_json) > 0:
+                        resp_json[0]["result_id"] = ids[1]
+
+                # If we have a predefined answer and this is the first page of history logs, 
+                # artificially insert it at the beginning (index 0).
+                if "/logs/responses/" in url and predefined_answer is not None and cur_page == 1:
+                    if isinstance(resp_json, list):
+                        # Construct an artificial log entry
+                        # We use the earliest timestamp from the real logs if possible
+                        ts = resp_json[0]["timestamp"] if resp_json else "2000-01-01T00:00:00.000Z"
+                        artificial_entry = {
+                            "timestamp": ts,
+                            "changes": {"content": predefined_answer},
+                            "is_artificial": True
+                        }
+                        resp_json.insert(0, artificial_entry)
 
                 # extract the data that we are interested in
                 if get_ids:
@@ -498,11 +519,6 @@ class AnsResponseFetcher:
                         return_data += resp_json
                     else:
                         return_data.append(resp_json)
-
-                # add result id to json
-                if len(ids) > 2:
-                    if isinstance(resp_json, list) and len(resp_json) > 0:
-                        resp_json[0]["result_id"] = ids[1]
 
                 # write to file
                 if should_write or should_queue:
@@ -659,6 +675,8 @@ class AnsResponseFetcher:
 
                             response_id = response["id"]
                             url = f"{base_url}/logs/responses/{response_id}"
+                            # Get the predefined answer for this question
+                            p_answer = relevant_questions.get(current_question)
                             fetch_successful, resp_data, _, _, base_path, rel_path = self._fetch_and_write(url,
                                                                                                            response_path,
                                                                                                            self.request_header,
@@ -668,7 +686,8 @@ class AnsResponseFetcher:
                                                                                                            get_ids=False,
                                                                                                            job_queue=None,  # Don't queue individually
                                                                                                            should_queue=False,
-                                                                                                           should_write=True)
+                                                                                                           should_write=True,
+                                                                                                           predefined_answer=p_answer)
 
                             if not fetch_successful:
                                 failed.append(resp_data)

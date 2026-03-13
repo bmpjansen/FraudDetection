@@ -241,7 +241,7 @@ class AnsResponseFetcher:
 
         logger.info("Retrieved all names.")
 
-    def _write(self, directory: Path, content: dict | list, ids: list, encoding: str = 'utf-8') -> tuple[Path, Path]:
+    def _write(self, directory: Path, content: dict | list, ids: list, encoding: str = 'utf-8', should_append: bool = True) -> tuple[Path, Path]:
         """
         Write 'content' to a file located in 'directory'.
 
@@ -249,6 +249,7 @@ class AnsResponseFetcher:
         :param content: the content that will be written to file
         :param ids: the path of ids that let to this point (assignment, result, submission, response)
         :param encoding: the string encoding to use. Default = utf-8
+        :param should_append: whether to append to existing content or overwrite. Default = True
 
         :return: the path of the written file
         """
@@ -258,7 +259,7 @@ class AnsResponseFetcher:
         pickle_full_path = directory / f"{file_name}.pickle"
 
         # Get the current content of the file if it exists and append the new content
-        if pickle_full_path.exists():
+        if should_append and pickle_full_path.exists():
             with open(pickle_full_path, 'rb') as file:
                 previous: list | dict = pickle.load(file)
 
@@ -496,7 +497,7 @@ class AnsResponseFetcher:
                 if "/logs/responses/" in url and predefined_answer is not None and cur_page == 1:
                     if isinstance(resp_json, list):
                         # Construct an artificial log entry
-                        # We use the earliest timestamp from the real logs if possible
+                        # We use the earliest timestamp from the real logs if available
                         ts = resp_json[0]["timestamp"] if resp_json else "2000-01-01T00:00:00.000Z"
                         artificial_entry = {
                             "timestamp": ts,
@@ -522,7 +523,8 @@ class AnsResponseFetcher:
 
                 # write to file
                 if should_write or should_queue:
-                    base_path, rel_path = self._write(path, resp_json, ids)
+                    # Overwrite on the first page to avoid data duplication from previous runs
+                    base_path, rel_path = self._write(path, resp_json, ids, should_append=(cur_page > 1))
 
                 cur_page += 1
 

@@ -103,9 +103,6 @@ class AnsResponseFetcher:
         self.request_header = {
             'Authorization': f"Bearer {api_key}"
         }
-        # Cache for question categories to avoid redundant API calls
-        # Maps question_id -> category (e.g., "open", "code", "multiple_choice", etc.)
-        self._question_category_cache: dict[int, str] = {}
         # Categories that indicate open-ended questions we want to analyze
         # These can be found at https://ans.app/api/docs/v2/swagger.yaml (ctrl+f "description: An open question" to jump to the relevant section)
         self.OPEN_QUESTION_CATEGORIES = {"open", "code"}
@@ -274,52 +271,68 @@ class AnsResponseFetcher:
             logger.debug(f"Sleeping for {time_to_sleep} seconds...")
             time.sleep(time_to_sleep)
 
-    def _is_open_question(self, base_url: str, question_id: int) -> bool:
+    def _get_relevant_questions(self, base_url: str, assignment_id: int) -> set[int]:
         """
-        Check if a question is an open-ended question (category is 'open' or 'code').
-        Results are cached to avoid redundant API calls.
+        Fetch all exercises and questions for an assignment and return a set of IDs for open questions.
 
         :param base_url: the base URL of the API
-        :param question_id: the ID of the question to check
-        :return: True if the question is open-ended, False otherwise
+        :param assignment_id: the ID of the assignment to fetch questions for
+        :return: A set of question IDs that are open-ended or code questions
         """
-        # Return cached result if available
-        if question_id in self._question_category_cache:
-            category = self._question_category_cache[question_id]
-            return category in self.OPEN_QUESTION_CATEGORIES
+        interesting_questions = set()
+        logger.info(f"Pre-fetching question metadata for assignment {assignment_id}...")
 
-        # Fetch question details from API
         try:
+            # List all exercises for the assignment
             self._wait_if_required()
-            url = f"{base_url}/questions/{question_id}"
-            response = requests.get(url, headers=self.request_header)
+            exercises_url = f"{base_url}/assignments/{assignment_id}/exercises"
+            response = requests.get(exercises_url, headers=self.request_header)
             self.last_request_time = time.time()
 
-            # Handle rate limiting
             if response.status_code == 429:
-                logger.warning("Got back HTTP 429; retrying later...")
-                time.sleep(1)
-                # Retry after waiting
-                return self._is_open_question(base_url, question_id)
+                logger.warning("Got back HTTP 429 while fetching exercises; sleeping for 10 seconds...")
+                time.sleep(10)
+                return self._get_relevant_questions(base_url, assignment_id)
 
-            if response.status_code == 200:
-                resp_json = response.json()
-                category = resp_json.get("category", "")
-                # Cache the result
-                self._question_category_cache[question_id] = category
-                is_open = category in self.OPEN_QUESTION_CATEGORIES
-                logger.debug(
-                    f"Question {question_id} has category '{category}', is_open={is_open}")
-                return is_open
-            else:
-                logger.warning(
-                    f"Failed to fetch question {question_id}, status code: {response.status_code}. Assuming not open.")
-                return False
+            response.raise_for_status()
+            exercises = response.json()
+
+            for exercise in exercises:
+                exercise_id = exercise["id"]
+
+                # List all questions for each exercise
+                cur_page = 1
+                total_pages = 1
+                while cur_page <= total_pages:
+                    self._wait_if_required()
+                    questions_url = f"{base_url}/exercises/{exercise_id}/questions?limit={self.LIMIT}&page={cur_page}"
+                    q_response = requests.get(questions_url, headers=self.request_header)
+                    self.last_request_time = time.time()
+
+                    if q_response.status_code == 429:
+                        logger.warning(f"Got back HTTP 429 while fetching questions for exercise {exercise_id}; sleeping for 10 seconds...")
+                        time.sleep(10)
+                        continue
+
+                    q_response.raise_for_status()
+
+                    # Update pagination
+                    total_pages = int(q_response.headers.get("Total-Pages", 1))
+                    questions = q_response.json()
+
+                    for q in questions:
+                        category = q.get("category", "")
+                        if category in self.OPEN_QUESTION_CATEGORIES:
+                            interesting_questions.add(q["id"])
+
+                    cur_page += 1
+
+            logger.info(f"Identified {len(interesting_questions)} open/code questions out of all exercises in assignment {assignment_id}.")
 
         except Exception as e:
-            logger.warning(
-                f"Exception while checking question category for {question_id}: {e}. Assuming not open.")
-            return False
+            logger.error(f"Failed to pre-fetch question metadata for assignment {assignment_id}: {e}")
+
+        return interesting_questions
 
     def _fetch_and_write(self, url: str, path: str | Path, header: dict, ids: list, has_pages: bool = False,
                          get_ids: bool = True, interested_in: str = None,
@@ -408,13 +421,15 @@ class AnsResponseFetcher:
                         f"Got back an empty json object with {url}.")
                     return False, [], -1, -1, None, None
 
-                # extract the ids that we are interested in
+                # extract the data that we are interested in
                 if get_ids:
                     if interested_in is None:
-                        return_ids += [x["id"] for x in resp_json]
+                        if isinstance(resp_json, list):
+                            return_ids += [x["id"] for x in resp_json]
+                        else:
+                            return_ids.append(resp_json.get("id"))
                     else:
-                        return_ids += [x["id"]
-                                       for x in resp_json[interested_in]]
+                        return_ids += resp_json[interested_in]
 
                 try:
                     current_exercise = resp_json["exercise_id"]
@@ -493,31 +508,45 @@ class AnsResponseFetcher:
                     continue
                 logger.info(f"Retrieved assignment {assignment_id}.")
 
+                # Pre-fetch relevant questions for this assignment
+                relevant_questions = self._get_relevant_questions(base_url, assignment_id)
+
                 for result_id in result_ids:
                     if stop_event.is_set():
                         break
 
                     url = f"{base_url}/results/{result_id}"
-                    was_successful, submission_ids, _, _, _, _ = self._fetch_and_write(url, self.result_path,
+                    was_successful, submission_data, _, _, _, _ = self._fetch_and_write(url, self.result_path,
                                                                                        self.request_header,
                                                                                        [assignment_id,
                                                                                            result_id],
                                                                                        interested_in="submissions")
 
                     if not was_successful:
-                        failed.append(submission_ids)
+                        failed.append(submission_data)
                         continue
                     logger.info(f"   Retrieved result {result_id}.")
 
                     # Collect all response paths for this (assignment_id, result_id) pair
                     result_response_paths = []
 
-                    for submission_id in submission_ids:
+                    for submission in submission_data:
                         if stop_event.is_set():
                             break
 
+                        submission_id = submission["id"]
+                        current_question = submission.get("question_id", -1)
+                        current_exercise = submission.get("exercise_id", -1)
+
+                        # Filter: only process open-ended and code questions using pre-fetched metadata
+                        if current_question != -1 and current_question not in relevant_questions:
+                            logger.info(
+                                f"      Skipping submission {submission_id} - question {current_question} is not an open/code question.")
+                            continue
+
                         url = f"{base_url}/submissions/{submission_id}"
-                        was_successful, response_ids, current_exercise, current_question, _, _ = (
+                        # responses will contain full response objects
+                        was_successful, responses, _, _, _, _ = (
                             self._fetch_and_write(url,
                                                   self.submission_path,
                                                   self.request_header,
@@ -532,37 +561,31 @@ class AnsResponseFetcher:
                             f"{assignment_id}/{current_exercise}/{current_question}")
 
                         if not was_successful:
-                            failed.append(response_ids)
+                            failed.append(responses)
                             continue
                         logger.info(
                             f"      Retrieved submission {submission_id}.")
 
-                        # Filter: only process open-ended and code questions
-                        if current_question != -1 and not self._is_open_question(base_url, current_question):
-                            logger.info(
-                                f"      Skipping submission {submission_id} - question {current_question} is not an open/code question.")
-                            continue
-
-                        for response_id in response_ids:
+                        for response in responses:
                             if stop_event.is_set():
                                 break
 
+                            response_id = response["id"]
                             url = f"{base_url}/logs/responses/{response_id}"
-                            was_successful, response, _, _, base_path, rel_path = self._fetch_and_write(url,
-                                                                                                        response_path,
-                                                                                                        self.request_header,
-                                                                                                        [assignment_id, result_id,
-                                                                                                         submission_id, response_id],
-                                                                                                        has_pages=False,
-                                                                                                        get_ids=False,
-                                                                                                        job_queue=None,  # Don't queue individually
-                                                                                                        should_queue=False,
-                                                                                                        should_write=True)
+                            fetch_successful, resp_data, _, _, base_path, rel_path = self._fetch_and_write(url,
+                                                                                                            response_path,
+                                                                                                            self.request_header,
+                                                                                                            [assignment_id, result_id,
+                                                                                                            submission_id, response_id],
+                                                                                                            has_pages=False,
+                                                                                                            get_ids=False,
+                                                                                                            job_queue=None,  # Don't queue individually
+                                                                                                            should_queue=False,
+                                                                                                            should_write=True)
 
-                            if not was_successful:
-                                failed.append(response)
+                            if not fetch_successful:
+                                failed.append(resp_data)
                                 continue
-
                             # Store the path for batch processing
                             if base_path is not None and rel_path is not None:
                                 result_response_paths.append({

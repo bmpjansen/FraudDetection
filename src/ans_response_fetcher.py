@@ -103,9 +103,35 @@ class AnsResponseFetcher:
         self.request_header = {
             'Authorization': f"Bearer {api_key}"
         }
+        self._response_cache = {}
         # Categories that indicate open-ended questions we want to analyze
         # These can be found at https://ans.app/api/docs/v2/swagger.yaml (ctrl+f "description: An open question" to jump to the relevant section)
         self.OPEN_QUESTION_CATEGORIES = {"open", "code"}
+
+    def _cached_get(self, url: str) -> tuple[dict | list | None, dict]:
+        """
+        Performs a GET request with in-memory caching and rate-limit handling.
+        Returns a tuple of (json_data, headers).
+        """
+        if url in self._response_cache:
+            return self._response_cache[url]
+
+        self._wait_if_required()
+        response = requests.get(url, headers=self.request_header)
+        self.last_request_time = time.time()
+
+        if response.status_code == 429:
+            logger.warning(f"Got back HTTP 429 for {url}; sleeping for 10 seconds...")
+            time.sleep(10)
+            return self._cached_get(url)
+
+        response.raise_for_status()
+        data = response.json()
+        headers = response.headers  # Keep as CaseInsensitiveDict
+        
+        # Cache the result
+        self._response_cache[url] = (data, headers)
+        return data, headers
 
     def fetch_unknown_names(self, response_dir: Path, base_url: str):
 
@@ -285,19 +311,8 @@ class AnsResponseFetcher:
 
         try:
             # List all exercises for the assignment
-            self._wait_if_required()
             exercises_url = f"{base_url}/assignments/{assignment_id}/exercises"
-            response = requests.get(exercises_url, headers=self.request_header)
-            self.last_request_time = time.time()
-
-            if response.status_code == 429:
-                logger.warning(
-                    "Got back HTTP 429 while fetching exercises; sleeping for 10 seconds...")
-                time.sleep(10)
-                return self._get_relevant_questions(base_url, assignment_id)
-
-            response.raise_for_status()
-            exercises = response.json()
+            exercises, _ = self._cached_get(exercises_url)
 
             for exercise in exercises:
                 exercise_id = exercise["id"]
@@ -306,23 +321,11 @@ class AnsResponseFetcher:
                 cur_page = 1
                 total_pages = 1
                 while cur_page <= total_pages:
-                    self._wait_if_required()
                     questions_url = f"{base_url}/exercises/{exercise_id}/questions?limit={self.LIMIT}&page={cur_page}"
-                    q_response = requests.get(
-                        questions_url, headers=self.request_header)
-                    self.last_request_time = time.time()
-
-                    if q_response.status_code == 429:
-                        logger.warning(
-                            f"Got back HTTP 429 while fetching questions for exercise {exercise_id}; sleeping for 10 seconds...")
-                        time.sleep(10)
-                        continue
-
-                    q_response.raise_for_status()
+                    questions, q_headers = self._cached_get(questions_url)
 
                     # Update pagination
-                    total_pages = int(q_response.headers.get("Total-Pages", 1))
-                    questions = q_response.json()
+                    total_pages = int(q_headers.get("Total-Pages", 1))
 
                     for q in questions:
                         category = q.get("category", "")
@@ -345,20 +348,8 @@ class AnsResponseFetcher:
         Checks the number of history entries for a response.
         """
         try:
-            self._wait_if_required()
-            # We only need to know if it has substantial history, so fetching a small number of entries is enough.
-            url = f"{base_url}/logs/responses/{response_id}?limit=10"
-            response = requests.get(url, headers=self.request_header)
-            self.last_request_time = time.time()
-
-            if response.status_code == 429:
-                logger.warning(
-                    "Got back HTTP 429 while probing; sleeping for 10 seconds...")
-                time.sleep(10)
-                return self._get_history_count(base_url, response_id)
-
-            response.raise_for_status()
-            logs = response.json()
+            url = f"{base_url}/logs/responses/{response_id}"
+            logs, _ = self._cached_get(url)
 
             return len(logs) if isinstance(logs, list) else 0
         except Exception as e:
@@ -384,12 +375,8 @@ class AnsResponseFetcher:
             current_res_max = 0
             try:
                 # Fetch result details to get submissions
-                self._wait_if_required()
                 url = f"{base_url}/results/{r_id}"
-                response = requests.get(url, headers=self.request_header)
-                self.last_request_time = time.time()
-                response.raise_for_status()
-                res_detail = response.json()
+                res_detail, _ = self._cached_get(url)
 
                 submissions = res_detail.get("submissions", [])
                 for sub in submissions:
@@ -398,14 +385,10 @@ class AnsResponseFetcher:
                         sub_id = sub["id"]
 
                         # We need to fetch the submission details to get response IDs
-                        self._wait_if_required()
                         sub_url = f"{base_url}/submissions/{sub_id}"
-                        sub_resp = requests.get(
-                            sub_url, headers=self.request_header)
-                        self.last_request_time = time.time()
-                        sub_resp.raise_for_status()
+                        sub_resp_data, _ = self._cached_get(sub_url)
 
-                        responses = sub_resp.json().get("responses", [])
+                        responses = sub_resp_data.get("responses", [])
                         for resp in responses:
                             count = self._get_history_count(
                                 base_url, resp["id"])
@@ -478,40 +461,19 @@ class AnsResponseFetcher:
 
             while cur_page <= nr_of_pages:
 
-                self._wait_if_required()
-
                 # send request
                 if has_pages:
                     full_url = f"{url}?limit={self.LIMIT}&page={cur_page}"
                 else:
                     full_url = url
-                response = requests.get(full_url, headers=header)
-
-                self.last_request_time = time.time()
-
-                # if we receive HTTP 429 (Too many requests), wait before retrying
-                if response.status_code == 429:
-                    logger.warning(
-                        "Got back HTTP 429; sleeping for 30 seconds...")
-                    time.sleep(30)
-                    continue
-
-                response.raise_for_status()
+                
+                resp_json, resp_headers = self._cached_get(full_url)
 
                 # update total number of pages
-                resp_header = response.headers
                 if has_pages:
-                    nr_of_pages = int(resp_header["Total-Pages"])
+                    nr_of_pages = int(resp_headers["Total-Pages"])
                 else:
                     nr_of_pages = 1
-
-                if has_pages and cur_page != int(resp_header["Current-Page"]):
-                    raise ValueError(
-                        f"The fetched page is different from the one expected! (expected: {cur_page}, "
-                        f"instead got: {int(resp_header['Current-Page'])})")
-
-                # get the response
-                resp_json = response.json()
 
                 # check for odd responses
                 if resp_json is None:

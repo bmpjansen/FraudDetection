@@ -6,9 +6,10 @@ from typing import List, Tuple, Dict
 from bs4 import BeautifulSoup
 
 
-def extract_content(version_history: list[dict], remove_html: bool = True) -> tuple[str, list[int]]:
+def extract_content(version_history: list[dict], remove_html: bool = True) -> tuple[str, list[int], list[bool]]:
     word = ''
     separation_indices = []
+    artificial_flags = []
     separator_generator = chinese_character_generator()
 
     for version in version_history:
@@ -22,22 +23,23 @@ def extract_content(version_history: list[dict], remove_html: bool = True) -> tu
 
             word += (content + next(separator_generator).decode('utf-8'))
             separation_indices.append(len(word) - 1)
+            artificial_flags.append(version.get("is_artificial", False))
 
-    return word, separation_indices
+    return word, separation_indices, artificial_flags
 
 
-def get_word_from_file(path: Path) -> tuple[str, list[int]]:
+def get_word_from_file(path: Path) -> tuple[str, list[int], list[bool]]:
     with open(path, "rb") as file:
         return extract_content(pickle.load(file))
 
 
-def extract_snapshot_with_metadata(version: dict, remove_html: bool = True) -> tuple[str, str | None]:
+def extract_snapshot_with_metadata(version: dict, remove_html: bool = True) -> tuple[str, str | None, bool]:
     """
     Extract content from a single snapshot version.
     
     :param version: A single version dict from version history
     :param remove_html: Whether to remove HTML tags
-    :return: Tuple of (content, timestamp)
+    :return: Tuple of (content, timestamp, is_artificial)
     """
     if ("changes" in version
             and "content" in version["changes"]
@@ -48,9 +50,10 @@ def extract_snapshot_with_metadata(version: dict, remove_html: bool = True) -> t
             content = BeautifulSoup(content, "lxml").get_text()
         
         timestamp = version.get("timestamp") if "timestamp" in version else None
-        return content, timestamp
+        is_artificial = version.get("is_artificial", False)
+        return content, timestamp, is_artificial
     
-    return "", None
+    return "", None, False
 
 
 def extract_all_snapshots_sorted(response_paths: List[Dict], base_path: Path, remove_html: bool = True) -> Tuple[str, List[int], List[Dict]]:
@@ -61,7 +64,7 @@ def extract_all_snapshots_sorted(response_paths: List[Dict], base_path: Path, re
     :param base_path: Base path for resolving relative paths
     :param remove_html: Whether to remove HTML tags
     :return: Tuple of (concatenated_word, separation_indices, snapshot_metadata)
-             where snapshot_metadata is a list of dicts with keys: 'question_path', 'snapshot_index', 'timestamp'
+             where snapshot_metadata is a list of dicts with keys: 'question_path', 'snapshot_index', 'timestamp', 'is_artificial'
     """
     all_snapshots = []
     
@@ -77,11 +80,12 @@ def extract_all_snapshots_sorted(response_paths: List[Dict], base_path: Path, re
             
             # Extract each snapshot with its metadata
             for snapshot_idx, version in enumerate(version_history):
-                content, timestamp = extract_snapshot_with_metadata(version, remove_html)
+                content, timestamp, is_artificial = extract_snapshot_with_metadata(version, remove_html)
                 if content:  # Only add non-empty snapshots
                     all_snapshots.append({
                         'content': content,
                         'timestamp': timestamp,
+                        'is_artificial': is_artificial,
                         'question_path': rel_path_str,  # Store as normalized string
                         'snapshot_index': snapshot_idx,
                         'version': version  # Keep original for reference
@@ -97,6 +101,7 @@ def extract_all_snapshots_sorted(response_paths: List[Dict], base_path: Path, re
             return datetime.max  # Put snapshots without timestamps at the end, should not happen
         try:
             # Use fromisoformat for ISO 8601 format (standard ANS API format)
+            # Handles formats like: 2025-01-01T12:00:00.000000+00:00 or 2025-01-01T12:00:00+00:00
             return datetime.fromisoformat(ts.replace('Z', '+00:00'))
         except (ValueError, AttributeError):
             # If parsing fails, put at the end 
@@ -118,7 +123,8 @@ def extract_all_snapshots_sorted(response_paths: List[Dict], base_path: Path, re
         snapshot_metadata.append({
             'question_path': snapshot['question_path'],
             'snapshot_index': snapshot['snapshot_index'],
-            'timestamp': snapshot['timestamp']
+            'timestamp': snapshot['timestamp'],
+            'is_artificial': snapshot['is_artificial']
         })
     
     return word, separation_indices, snapshot_metadata

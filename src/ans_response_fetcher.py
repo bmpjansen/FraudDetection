@@ -12,26 +12,14 @@ import logging
 logger = logging.getLogger()
 
 
-def read_api_key(file_path='api_key.txt') -> str | None:
-    """
-    Read the api key from a file named 'api_key.txt'.
-    """
-    return 'abcdefg'
-    # try:
-    #     with open(file_path, 'r') as file:
-    #         return file.read().strip()
-    # except (FileNotFoundError, PermissionError, OSError) as e:
-    #     logger.warning(f"An exception was thrown while retrieving the API key: {e}")
-    #     return None
-
-
 def unpack_ids(ids: list[int]) -> tuple[int, int | None, int | None, int | None]:
     """
     Returns a shallow copy of ids with exactly four elements.
     If ids contains less than four elements then the remaining space is filled with Nones.
     """
     if len(ids) < 1 or len(ids) > 4:
-        raise ValueError(f"the length of the ids list is outside the allowed range [1,4]. It was {len(ids)}.")
+        raise ValueError(
+            f"the length of the ids list is outside the allowed range [1,4]. It was {len(ids)}.")
 
     out = [None, None, None, None]
     for i in range(0, len(ids)):
@@ -115,12 +103,35 @@ class AnsResponseFetcher:
         self.request_header = {
             'Authorization': f"Bearer {api_key}"
         }
-        # Cache for question categories to avoid redundant API calls
-        # Maps question_id -> category (e.g., "open", "code", "multiple_choice", etc.)
-        self._question_category_cache: dict[int, str] = {}
+        self._response_cache = {}
         # Categories that indicate open-ended questions we want to analyze
         # These can be found at https://ans.app/api/docs/v2/swagger.yaml (ctrl+f "description: An open question" to jump to the relevant section)
         self.OPEN_QUESTION_CATEGORIES = {"open", "code"}
+
+    def _cached_get(self, url: str) -> tuple[dict | list | None, dict]:
+        """
+        Performs a GET request with in-memory caching and rate-limit handling.
+        Returns a tuple of (json_data, headers).
+        """
+        if url in self._response_cache:
+            return self._response_cache[url]
+
+        self._wait_if_required()
+        response = requests.get(url, headers=self.request_header)
+        self.last_request_time = time.time()
+
+        if response.status_code == 429:
+            logger.warning(f"Got back HTTP 429 for {url}; sleeping for 10 seconds...")
+            time.sleep(10)
+            return self._cached_get(url)
+
+        response.raise_for_status()
+        data = response.json()
+        headers = response.headers  # Keep as CaseInsensitiveDict
+        
+        # Cache the result
+        self._response_cache[url] = (data, headers)
+        return data, headers
 
     def fetch_unknown_names(self, response_dir: Path, base_url: str):
 
@@ -144,13 +155,15 @@ class AnsResponseFetcher:
             try:
                 self._wait_if_required()
                 assignment_info_url = f"{base_url}/assignments/{as_id}"
-                response = requests.get(assignment_info_url, headers=self.request_header)
+                response = requests.get(
+                    assignment_info_url, headers=self.request_header)
                 self.last_request_time = time.time()
-                
+
                 # if we receive HTTP 429 (Too many requests), wait before retrying
                 if response.status_code == 429:
-                    logger.warning("Got back HTTP 429; sleeping for 30 seconds...")
-                    time.sleep(30)
+                    logger.warning(
+                        "Got back HTTP 429; sleeping for 10 seconds...")
+                    time.sleep(10)
                     return
 
                 elif response.status_code == 200:
@@ -159,37 +172,45 @@ class AnsResponseFetcher:
                     self._wait_if_required()
                     course_id = resp_json['course_id']
                     course_info_url = f"{base_url}/courses/{course_id}"
-                    courseresponse = requests.get(course_info_url, headers=self.request_header)
+                    courseresponse = requests.get(
+                        course_info_url, headers=self.request_header)
                     self.last_request_time = time.time()
 
                     if courseresponse.status_code == 200:
                         cresp_json = courseresponse.json()
 
                         if str(cresp_json['course_code']) != "None":
-                            assignmentyear = " (" + str(cresp_json['year']) + " " + str(cresp_json['course_code']) + ")"
+                            assignmentyear = " (" + str(cresp_json['year']) + " " + str(
+                                cresp_json['course_code']) + ")"
 
                         else:
-                            assignmentyear = " (" + str(cresp_json['year']) + ")"
-                        
+                            assignmentyear = " (" + \
+                                str(cresp_json['year']) + ")"
+
                     else:
-                        logger.warn(f"Unknown status code in second stage while retrieving year for course {course_id}. Code: {courseresponse.status_code}")
-                
+                        logger.warn(
+                            f"Unknown status code in second stage while retrieving year for course {course_id}. Code: {courseresponse.status_code}")
+
                 else:
-                    logger.warn(f"Unknown status code while retrieving year for assignment {as_id}. Code: {response.status_code}")
+                    logger.warn(
+                        f"Unknown status code while retrieving year for assignment {as_id}. Code: {response.status_code}")
 
             except Exception as e:
-                logger.warn(f"Exception while retrieving year for assignment {as_id}. Exception: {e}")
+                logger.warn(
+                    f"Exception while retrieving year for assignment {as_id}. Exception: {e}")
 
             def retrieve(url, filepath, key, uniqueID):
                 try:
                     if not filepath.exists():
                         self._wait_if_required()
-                        response = requests.get(url, headers=self.request_header)
+                        response = requests.get(
+                            url, headers=self.request_header)
                         self.last_request_time = time.time()
 
                         # if we receive HTTP 429 (Too many requests), wait before retrying
                         if response.status_code == 429:
-                            logger.warning("Got back HTTP 429; sleeping for 30 seconds...")
+                            logger.warning(
+                                "Got back HTTP 429; sleeping for 30 seconds...")
                             time.sleep(30)
                             return
 
@@ -197,26 +218,30 @@ class AnsResponseFetcher:
                             resp_json = response.json()
                             with open(filepath, 'w') as file:
                                 # Write the name, append the ID of the relevant object to make them unique. This is necessary to parse the dropdowns unambiguously.
-                                file.write(str(resp_json[key]) + assignmentyear + " [" + uniqueID + "]")
+                                file.write(
+                                    str(resp_json[key]) + assignmentyear + " [" + uniqueID + "]")
 
                 except Exception as e:
-                    logger.warn(f"Exception while retrieve name for {filepath.parent.relative_to(response_dir)}. Exception: {e}")
+                    logger.warn(
+                        f"Exception while retrieve name for {filepath.parent.relative_to(response_dir)}. Exception: {e}")
 
             retrieve(url=f"{base_url}/assignments/{as_id}",
                      filepath=response_dir / str(as_id) / filename,
                      key='name', uniqueID=str(as_id))
 
             retrieve(url=f"{base_url}/exercises/{ex_id}",
-                     filepath=response_dir / str(as_id) / str(ex_id) / filename,
+                     filepath=response_dir /
+                     str(as_id) / str(ex_id) / filename,
                      key='name', uniqueID=str(ex_id))
 
             retrieve(url=f"{base_url}/questions/{q_id}",
-                     filepath=response_dir / str(as_id) / str(ex_id) / str(q_id) / filename,
+                     filepath=response_dir /
+                     str(as_id) / str(ex_id) / str(q_id) / filename,
                      key='position', uniqueID=str(q_id))
 
         logger.info("Retrieved all names.")
 
-    def _write(self, directory: Path, content: dict | list, ids: list, encoding: str = 'utf-8') -> tuple[Path, Path]:
+    def _write(self, directory: Path, content: dict | list, ids: list, encoding: str = 'utf-8', should_append: bool = True) -> tuple[Path, Path]:
         """
         Write 'content' to a file located in 'directory'.
 
@@ -224,6 +249,7 @@ class AnsResponseFetcher:
         :param content: the content that will be written to file
         :param ids: the path of ids that let to this point (assignment, result, submission, response)
         :param encoding: the string encoding to use. Default = utf-8
+        :param should_append: whether to append to existing content or overwrite. Default = True
 
         :return: the path of the written file
         """
@@ -233,7 +259,7 @@ class AnsResponseFetcher:
         pickle_full_path = directory / f"{file_name}.pickle"
 
         # Get the current content of the file if it exists and append the new content
-        if pickle_full_path.exists():
+        if should_append and pickle_full_path.exists():
             with open(pickle_full_path, 'rb') as file:
                 previous: list | dict = pickle.load(file)
 
@@ -272,55 +298,133 @@ class AnsResponseFetcher:
             logger.debug(f"Sleeping for {time_to_sleep} seconds...")
             time.sleep(time_to_sleep)
 
-    def _is_open_question(self, base_url: str, question_id: int) -> bool:
+    def _get_relevant_questions(self, base_url: str, assignment_id: int) -> dict[int, str | None]:
         """
-        Check if a question is an open-ended question (category is 'open' or 'code').
-        Results are cached to avoid redundant API calls.
+        Fetch all exercises and questions for an assignment and return a mapping of IDs to predefined answers.
 
         :param base_url: the base URL of the API
-        :param question_id: the ID of the question to check
-        :return: True if the question is open-ended, False otherwise
+        :param assignment_id: the ID of the assignment to fetch questions for
+        :return: A dictionary mapping question IDs to their predefined_answer string (or None)
         """
-        # Return cached result if available
-        if question_id in self._question_category_cache:
-            category = self._question_category_cache[question_id]
-            return category in self.OPEN_QUESTION_CATEGORIES
+        interesting_questions = {}
+        logger.info(
+            f"Pre-fetching question metadata for assignment {assignment_id}...")
 
-        # Fetch question details from API
         try:
-            self._wait_if_required()
-            url = f"{base_url}/questions/{question_id}"
-            response = requests.get(url, headers=self.request_header)
-            self.last_request_time = time.time()
+            # List all exercises for the assignment
+            exercises_url = f"{base_url}/assignments/{assignment_id}/exercises"
+            exercises, _ = self._cached_get(exercises_url)
 
-            # Handle rate limiting
-            if response.status_code == 429:
-                logger.warning("Got back HTTP 429; retrying later...")
-                time.sleep(1)
-                # Retry after waiting
-                return self._is_open_question(base_url, question_id)
+            for exercise in exercises:
+                exercise_id = exercise["id"]
 
-            if response.status_code == 200:
-                resp_json = response.json()
-                category = resp_json.get("category", "")
-                # Cache the result
-                self._question_category_cache[question_id] = category
-                is_open = category in self.OPEN_QUESTION_CATEGORIES
-                logger.debug(f"Question {question_id} has category '{category}', is_open={is_open}")
-                return is_open
-            else:
-                logger.warning(f"Failed to fetch question {question_id}, status code: {response.status_code}. Assuming not open.")
-                return False
+                # List all questions for each exercise
+                cur_page = 1
+                total_pages = 1
+                while cur_page <= total_pages:
+                    questions_url = f"{base_url}/exercises/{exercise_id}/questions?limit={self.LIMIT}&page={cur_page}"
+                    questions, q_headers = self._cached_get(questions_url)
+
+                    # Update pagination
+                    total_pages = int(q_headers.get("Total-Pages", 1))
+
+                    for q in questions:
+                        category = q.get("category", "")
+                        if category in self.OPEN_QUESTION_CATEGORIES:
+                            interesting_questions[q["id"]] = q.get("predefined_answer")
+
+                    cur_page += 1
+
+            logger.info(
+                f"Identified {len(interesting_questions)} open/code questions out of all exercises in assignment {assignment_id}.")
 
         except Exception as e:
-            logger.warning(f"Exception while checking question category for {question_id}: {e}. Assuming not open.")
-            return False
+            logger.error(
+                f"Failed to pre-fetch question metadata for assignment {assignment_id}: {e}")
+
+        return interesting_questions
+
+    def _get_history_count(self, base_url: str, response_id: int) -> int:
+        """
+        Checks the number of history entries for a response.
+        """
+        try:
+            url = f"{base_url}/logs/responses/{response_id}"
+            logs, _ = self._cached_get(url)
+
+            return len(logs) if isinstance(logs, list) else 0
+        except Exception as e:
+            logger.warning(
+                f"Failed to probe history for response {response_id}: {e}")
+            return 0
+
+    def _filter_for_original(self, base_url: str, user_results: list[dict], relevant_questions: dict[int, str | None]) -> int | None:
+        """
+        Identifies the original result among a list of results for the same student.
+        """
+
+        if not user_results:
+            return None
+        if len(user_results) == 1:
+            return user_results[0]["id"]
+
+        max_count = -1
+        best_id = user_results[0]["id"]
+
+        for res in user_results:
+            r_id = res["id"]
+            current_res_max = 0
+            try:
+                # Fetch result details to get submissions
+                url = f"{base_url}/results/{r_id}"
+                res_detail, _ = self._cached_get(url)
+
+                submissions = res_detail.get("submissions", [])
+                for sub in submissions:
+                    q_id = sub.get("question_id")
+                    if q_id in relevant_questions:
+                        sub_id = sub["id"]
+
+                        # We need to fetch the submission details to get response IDs
+                        sub_url = f"{base_url}/submissions/{sub_id}"
+                        sub_resp_data, _ = self._cached_get(sub_url)
+
+                        responses = sub_resp_data.get("responses", [])
+                        for resp in responses:
+                            count = self._get_history_count(
+                                base_url, resp["id"])
+                            
+                            print(f"History count for response {resp['id']} (question {q_id}): {count}")
+                            if count > current_res_max:
+                                current_res_max = count
+
+                            # If we found any real history, this is the original out of the peer-review duplicates, so we can stop checking
+                            if current_res_max >= 3:
+                                break
+                    if current_res_max >= 3:
+                        break
+
+                if current_res_max > max_count:
+                    max_count = current_res_max
+                    best_id = r_id
+
+                # If this result is the original
+                if max_count >= 3:
+                    return r_id
+
+            except Exception as e:
+                logger.warning(f"Error filtering result {r_id}: {e}")
+
+        logger.info(
+            f"      Selected result {best_id} for student (max history steps: {max_count if max_count != -1 else 'unknown'}).")
+        return best_id
 
     def _fetch_and_write(self, url: str, path: str | Path, header: dict, ids: list, has_pages: bool = False,
                          get_ids: bool = True, interested_in: str = None,
                          job_queue: Queue | None = None, should_queue: bool = False, should_write: bool = False,
-                         stop_event: Event | None = None) \
-            -> tuple[bool, list | str, int, int]:
+                         stop_event: Event | None = None,
+                         predefined_answer: str | None = None) \
+            -> tuple[bool, list | dict | str, int, int, Path | None, Path | None]:
         """
         Send an HTTP(S) request to 'url' with 'header' and saves the result at 'path'
 
@@ -334,10 +438,11 @@ class AnsResponseFetcher:
         :param should_queue: whether to put the output in the job_queue
         :param should_write: whether to write the output to the file
         :param stop_event: the event to stop sending the request
+        :param predefined_answer: optional predefined answer to insert as the first history state
 
-        :return: Tuple (successful, ids, exercise_id, question_id, base_path, rel_path), where
+        :return: Tuple (successful, data, exercise_id, question_id, base_path, rel_path), where
                  | *successful*: whether the fetching and writing was successful.
-                 | *ids*: list of ids obtained from the fetched json.
+                 | *data*: list of ids or list/dict of full objects obtained from the fetched json.
                  | *exercise_id*: if the received object contained an exercise_id, it will be returned here. Otherwise, returns -1.
                  | *question_id*: if the received object contained a question_id, it will be returned here. Otherwise, returns -1.
                  | *base_path*: base path of written file (if written), None otherwise.
@@ -350,7 +455,7 @@ class AnsResponseFetcher:
             nr_of_pages = 1000000
             cur_page = 1
 
-            return_ids = []
+            return_data = []
 
             current_exercise = -1
             current_question = -1
@@ -359,69 +464,67 @@ class AnsResponseFetcher:
 
             while cur_page <= nr_of_pages:
 
-                self._wait_if_required()
-
                 # send request
                 if has_pages:
                     full_url = f"{url}?limit={self.LIMIT}&page={cur_page}"
                 else:
                     full_url = url
-                response = requests.get(full_url, headers=header)
-
-                self.last_request_time = time.time()
-
-                # if we receive HTTP 429 (Too many requests), wait before retrying
-                if response.status_code == 429:
-                    logger.warning("Got back HTTP 429; sleeping for 30 seconds...")
-                    time.sleep(30)
-                    continue
-
-                response.raise_for_status()
+                
+                resp_json, resp_headers = self._cached_get(full_url)
 
                 # update total number of pages
-                resp_header = response.headers
                 if has_pages:
-                    nr_of_pages = int(resp_header["Total-Pages"])
+                    nr_of_pages = int(resp_headers.get("Total-Pages", 1))
                 else:
                     nr_of_pages = 1
-
-                if has_pages and cur_page != int(resp_header["Current-Page"]):
-                    raise ValueError(
-                        f"The fetched page is different from the one expected! (expected: {cur_page}, "
-                        f"instead got: {int(resp_header['Current-Page'])})")
-
-                # get the response
-                resp_json = response.json()
 
                 # check for odd responses
                 if resp_json is None:
                     logger.warning(f"Got back a None with {url}.")
                     return False, [], -1, -1, None, None
                 elif len(resp_json) <= 0:
-                    logger.warning(f"Got back an empty json object with {url}.")
+                    logger.warning(
+                        f"Got back an empty json object with {url}.")
                     return False, [], -1, -1, None, None
-
-                # extract the ids that we are interested in
-                if get_ids:
-                    if interested_in is None:
-                        return_ids += [x["id"] for x in resp_json]
-                    else:
-                        return_ids += [x["id"] for x in resp_json[interested_in]]
-
-                try:
-                    current_exercise = resp_json["exercise_id"]
-                    current_question = resp_json["question_id"]
-                except:
-                    pass
 
                 # add result id to json
                 if len(ids) > 2:
                     if isinstance(resp_json, list) and len(resp_json) > 0:
                         resp_json[0]["result_id"] = ids[1]
 
+                # If we have a predefined answer and this is the first page of history logs, 
+                # artificially insert it at the beginning (index 0).
+                if "/logs/responses/" in url and predefined_answer is not None and cur_page == 1:
+                    if isinstance(resp_json, list):
+                        # Construct an artificial log entry
+                        # We use the earliest timestamp from the real logs if available
+                        ts = resp_json[0]["timestamp"] if resp_json else "2000-01-01T00:00:00.000Z"
+                        artificial_entry = {
+                            "timestamp": ts,
+                            "changes": {"content": predefined_answer},
+                            "is_artificial": True
+                        }
+                        resp_json.insert(0, artificial_entry)
+
+                # extract the data that we are interested in
+                if get_ids:
+                    if interested_in is None:
+                        if isinstance(resp_json, list):
+                            return_data += [x["id"] for x in resp_json]
+                        else:
+                            return_data.append(resp_json.get("id"))
+                    else:
+                        return_data += resp_json[interested_in]
+                else:
+                    if isinstance(resp_json, list):
+                        return_data += resp_json
+                    else:
+                        return_data.append(resp_json)
+
                 # write to file
                 if should_write or should_queue:
-                    base_path, rel_path = self._write(path, resp_json, ids)
+                    # Overwrite on the first page to avoid data duplication from previous runs
+                    base_path, rel_path = self._write(path, resp_json, ids, should_append=(cur_page > 1))
 
                 cur_page += 1
 
@@ -443,7 +546,7 @@ class AnsResponseFetcher:
             path = print_other_error_message(e, url, ids)
             return False, path, -1, -1, None, None
 
-        return True, return_ids, current_exercise, current_question, base_path, rel_path
+        return True, return_data, current_exercise, current_question, base_path, rel_path
 
     def _main_loops(self, base_url: str,
                     assignment_ids: list[int] | tuple[int],
@@ -473,41 +576,82 @@ class AnsResponseFetcher:
                 if stop_event.is_set():
                     break
 
-                logger.info(f"--- Starting retrieval of assignment {assignment_id} ---")
+                logger.info(
+                    f"--- Starting retrieval of assignment {assignment_id} ---")
+
+                # Pre-fetch relevant questions for this assignment
+                relevant_questions = self._get_relevant_questions(
+                    base_url, assignment_id)
 
                 url = f"{base_url}/assignments/{assignment_id}/results"
-                was_successful, result_ids, _, _, _, _ = self._fetch_and_write(url, self.assignment_path, self.request_header,
-                                                                         [assignment_id], has_pages=True)
+                # Fetch full result objects to allow grouping by user_id
+                was_successful, results, _, _, _, _ = self._fetch_and_write(url, self.assignment_path, self.request_header,
+                                                                            [assignment_id], has_pages=True, get_ids=False)
 
                 if not was_successful:
-                    failed.append(result_ids)
+                    failed.append(results)
                     continue
                 logger.info(f"Retrieved assignment {assignment_id}.")
+
+                # Group results by user_id to detect peer-review duplicates
+                results_by_user = {}
+                for res in results:
+                    u_id = res.get("user_id")
+                    if u_id not in results_by_user:
+                        results_by_user[u_id] = []
+                    results_by_user[u_id].append(res)
+
+                result_ids = []
+                for u_id, user_results in results_by_user.items():
+                    if len(user_results) == 1:
+                        result_ids.append(user_results[0]["id"])
+                    else:
+                        logger.info(
+                            f"Student {u_id} has {len(user_results)} results. Filtering for original work...")
+                        best_res_id = self._filter_for_original(
+                            base_url, user_results, relevant_questions)
+                        if best_res_id:
+                            result_ids.append(best_res_id)
+
+                logger.info(
+                    f"Retrieved and filtered {len(result_ids)} unique results for assignment {assignment_id}.")
 
                 for result_id in result_ids:
                     if stop_event.is_set():
                         break
 
                     url = f"{base_url}/results/{result_id}"
-                    was_successful, submission_ids, _, _, _, _ = self._fetch_and_write(url, self.result_path,
-                                                                                 self.request_header,
-                                                                                 [assignment_id, result_id],
-                                                                                 interested_in="submissions")
+                    was_successful, submission_data, _, _, _, _ = self._fetch_and_write(url, self.result_path,
+                                                                                        self.request_header,
+                                                                                        [assignment_id,
+                                                                                         result_id],
+                                                                                        interested_in="submissions")
 
                     if not was_successful:
-                        failed.append(submission_ids)
+                        failed.append(submission_data)
                         continue
                     logger.info(f"   Retrieved result {result_id}.")
 
                     # Collect all response paths for this (assignment_id, result_id) pair
                     result_response_paths = []
 
-                    for submission_id in submission_ids:
+                    for submission in submission_data:
                         if stop_event.is_set():
                             break
 
+                        submission_id = submission["id"]
+                        current_question = submission.get("question_id", -1)
+                        current_exercise = submission.get("exercise_id", -1)
+
+                        # Filter: only process open-ended and code questions using pre-fetched metadata
+                        if current_question != -1 and current_question not in relevant_questions:
+                            logger.info(
+                                f"      Skipping submission {submission_id} - question {current_question} is not an open/code question.")
+                            continue
+
                         url = f"{base_url}/submissions/{submission_id}"
-                        was_successful, response_ids, current_exercise, current_question, _, _ = (
+                        # responses will contain full response objects
+                        was_successful, responses, _, _, _, _ = (
                             self._fetch_and_write(url,
                                                   self.submission_path,
                                                   self.request_header,
@@ -522,35 +666,34 @@ class AnsResponseFetcher:
                             f"{assignment_id}/{current_exercise}/{current_question}")
 
                         if not was_successful:
-                            failed.append(response_ids)
+                            failed.append(responses)
                             continue
-                        logger.info(f"      Retrieved submission {submission_id}.")
+                        logger.info(
+                            f"      Retrieved submission {submission_id}.")
 
-                        # Filter to the question types we want
-                        if current_question != -1 and not self._is_open_question(base_url, current_question):
-                            logger.info(f"      Skipping submission {submission_id} - question {current_question} is not an open/code question.")
-                            continue
-
-                        for response_id in response_ids:
+                        for response in responses:
                             if stop_event.is_set():
                                 break
 
+                            response_id = response["id"]
                             url = f"{base_url}/logs/responses/{response_id}"
-                            was_successful, response, _, _, base_path, rel_path = self._fetch_and_write(url,
-                                                                                   response_path,
-                                                                                   self.request_header,
-                                                                                   [assignment_id, result_id,
-                                                                                    submission_id, response_id],
-                                                                                   has_pages=False,
-                                                                                   get_ids=False,
-                                                                                   job_queue=None,  # Don't queue individually
-                                                                                   should_queue=False,
-                                                                                   should_write=True)
+                            # Get the predefined answer for this question
+                            p_answer = relevant_questions.get(current_question)
+                            fetch_successful, resp_data, _, _, base_path, rel_path = self._fetch_and_write(url,
+                                                                                                           response_path,
+                                                                                                           self.request_header,
+                                                                                                           [assignment_id, result_id,
+                                                                                                            submission_id, response_id],
+                                                                                                           has_pages=False,
+                                                                                                           get_ids=False,
+                                                                                                           job_queue=None,  # Don't queue individually
+                                                                                                           should_queue=False,
+                                                                                                           should_write=True,
+                                                                                                           predefined_answer=p_answer)
 
-                            if not was_successful:
-                                failed.append(response)
+                            if not fetch_successful:
+                                failed.append(resp_data)
                                 continue
-
                             # Store the path for batch processing
                             if base_path is not None and rel_path is not None:
                                 result_response_paths.append({
@@ -559,7 +702,8 @@ class AnsResponseFetcher:
                                 })
 
                             nr_responses_retrieved += 1
-                            logger.info(f"         Retrieved response {response_id}.")
+                            logger.info(
+                                f"         Retrieved response {response_id}.")
 
                     # Queue all responses for this (assignment_id, result_id) as a batch
                     if result_response_paths and job_queue is not None:
@@ -568,7 +712,8 @@ class AnsResponseFetcher:
                             'result_id': result_id,
                             'response_paths': result_response_paths
                         })
-                        logger.info(f"   Queued batch of {len(result_response_paths)} responses for assignment {assignment_id}, result {result_id}.")
+                        logger.info(
+                            f"   Queued batch of {len(result_response_paths)} responses for assignment {assignment_id}, result {result_id}.")
 
                 logger.info(f"--- Finished assignment {assignment_id} ---")
         except KeyboardInterrupt:
@@ -600,9 +745,11 @@ class AnsResponseFetcher:
         # if no paths list is given, apply the default paths
         if paths is None:
             other_out_dir = base_out_dir.joinpath('other')
-            self.assignment_path = other_out_dir.joinpath('assignments').resolve()
+            self.assignment_path = other_out_dir.joinpath(
+                'assignments').resolve()
             self.result_path = other_out_dir.joinpath('results').resolve()
-            self.submission_path = other_out_dir.joinpath('submissions').resolve()
+            self.submission_path = other_out_dir.joinpath(
+                'submissions').resolve()
             self.base_response_path = base_out_dir.resolve()
 
         # otherwise apply the given paths
@@ -624,16 +771,20 @@ class AnsResponseFetcher:
             os.makedirs(self.base_response_path, exist_ok=True)
 
             if not self.assignment_path.is_dir():
-                raise ValueError(f"assignment path is not pointing to a valid directory: {self.assignment_path}")
+                raise ValueError(
+                    f"assignment path is not pointing to a valid directory: {self.assignment_path}")
 
             if not self.result_path.is_dir():
-                raise ValueError(f"result path is not pointing to a valid directory: {self.result_path}")
+                raise ValueError(
+                    f"result path is not pointing to a valid directory: {self.result_path}")
 
             if not self.submission_path.is_dir():
-                raise ValueError(f"submission path is not pointing to a valid directory: {self.submission_path}")
+                raise ValueError(
+                    f"submission path is not pointing to a valid directory: {self.submission_path}")
 
             if not self.base_response_path.is_dir():
-                raise ValueError(f"response path is not pointing to a valid directory: {self.base_response_path}")
+                raise ValueError(
+                    f"response path is not pointing to a valid directory: {self.base_response_path}")
 
         logger.info('##################################################')
         logger.info("---- Output directories ----")
@@ -685,9 +836,9 @@ class AnsResponseFetcher:
 
         # print a summary to the terminal
         logger.info('')
-        logger.info(f"Successfully retrieved {nr_responses_retrieved} responses.")
+        logger.info(
+            f"Successfully retrieved {nr_responses_retrieved} responses.")
         logger.info(f"Failed {len(failed)} requests")
         for fail in failed:
             logger.info(f"    * {fail}")
         logger.info('')
-

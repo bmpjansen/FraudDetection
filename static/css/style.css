@@ -89,6 +89,16 @@ main {
     justify-content: right;
 }
 
+.predefined-answer-container {
+    justify-content: center;
+}
+
+.predefined-answer-indicator {
+    color: #a7a7a7;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
 /* TEXT SECTION */
 .scrollable-section {
     display: flex;

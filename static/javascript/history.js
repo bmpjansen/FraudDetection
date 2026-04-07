@@ -38,6 +38,19 @@ function findResultIdInHistory(entries) {
     return undefined;
 }
 
+function setPredefinedAnswerIndicator() {
+    const indicator = document.getElementById("predefined_answer_indicator");
+    if (!indicator) {
+        return;
+    }
+
+    if (hasArtificialInitialSnapshot()) {
+        indicator.textContent = "Has predefined answer";
+    } else {
+        indicator.textContent = "";
+    }
+}
+
 function toANSHandler() {
     if (result_id === undefined || result_id === null) {
         alert("No result id could be found. Retrieving the assignment again might fix this.")
@@ -79,6 +92,8 @@ function processHistory(data) {
     nVersions = history.length-1
     historyFormat = data["format"]
     result_id = data["result_id"];
+    setPredefinedAnswerIndicator();
+
     if (result_id === undefined || result_id === null) {
         result_id = findResultIdInHistory(history);
     }
@@ -99,6 +114,7 @@ function resetHistory() {
     nVersions = -1;
     timestamps = []
     result_id = undefined
+    setPredefinedAnswerIndicator();
 }
 
 function goToSignificant() {

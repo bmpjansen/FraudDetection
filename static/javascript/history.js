@@ -8,8 +8,51 @@ let result_id = undefined
 
 let goToSig = false;
 
+function hasArtificialInitialSnapshot() {
+    return Array.isArray(history)
+        && history.length > 0
+        && history[0] !== null
+        && history[0]["is_artificial"] === true;
+}
+
+function getEditDistanceIndexForVersion(versionNumber) {
+    if (nVersions === 0) {
+        return 0;
+    }
+
+    const offset = hasArtificialInitialSnapshot() ? 1 : 0;
+    return versionNumber - 1 + offset;
+}
+
+function findResultIdInHistory(entries) {
+    if (!Array.isArray(entries)) {
+        return undefined;
+    }
+
+    for (const entry of entries) {
+        if (entry && entry["result_id"] !== undefined && entry["result_id"] !== null) {
+            return entry["result_id"];
+        }
+    }
+
+    return undefined;
+}
+
+function setPredefinedAnswerIndicator() {
+    const indicator = document.getElementById("predefined_answer_indicator");
+    if (!indicator) {
+        return;
+    }
+
+    if (hasArtificialInitialSnapshot()) {
+        indicator.textContent = "Has predefined answer";
+    } else {
+        indicator.textContent = "";
+    }
+}
+
 function toANSHandler() {
-    if (result_id === undefined) {
+    if (result_id === undefined || result_id === null) {
         alert("No result id could be found. Retrieving the assignment again might fix this.")
         return
     }
@@ -48,9 +91,14 @@ function processHistory(data) {
     timestamps = data["timestamps"];
     nVersions = history.length-1
     historyFormat = data["format"]
-    result_id = history[0]["result_id"]
+    result_id = data["result_id"];
+    setPredefinedAnswerIndicator();
 
-    document.getElementById("toAnsBtn").disabled = result_id === undefined
+    if (result_id === undefined || result_id === null) {
+        result_id = findResultIdInHistory(history);
+    }
+
+    document.getElementById("toAnsBtn").disabled = result_id === undefined || result_id === null
 
     if ( 1 <= currentVersion && currentVersion <= nVersions ) {
         setVersionNumber(currentVersion)
@@ -66,10 +114,11 @@ function resetHistory() {
     nVersions = -1;
     timestamps = []
     result_id = undefined
+    setPredefinedAnswerIndicator();
 }
 
 function goToSignificant() {
-    if (!editDistances) {
+    if (!Array.isArray(editDistances) || editDistances.length === 0) {
         goToSig = true;
         fetchHistory()
         return;
@@ -91,8 +140,19 @@ function goToSignificant() {
         return;
     }
 
-    // found set the version and update the text
-    currentVersion = index
+    // Map edit-distance index to shown transition index.
+    // Histories with a predefined answer have an artificial first snapshot.
+    const offset = hasArtificialInitialSnapshot() ? 1 : 0;
+    currentVersion = index - offset + 1
+
+    if (currentVersion < 1) {
+        currentVersion = 1;
+    }
+
+    if (currentVersion > nVersions) {
+        currentVersion = nVersions;
+    }
+
     console.log("Found significant at version " + currentVersion)
 
     setVersionNumber(currentVersion)
@@ -207,10 +267,10 @@ function setVersionNumber(number) {
     document.getElementById("previous-version").disabled = number <= 1
     document.getElementById("first-version").disabled = number <= 1
 
-    if (!editDistances) {
+    if (!Array.isArray(editDistances) || editDistances.length === 0) {
         document.getElementById("edit_distance").innerHTML = ""
     } else {
-        let idx = (nVersions === 0) ? 0 : currentVersion;
+        let idx = getEditDistanceIndexForVersion(currentVersion);
         let text = (editDistances[idx] === undefined) ? '-' : editDistances[idx];
 
         document.getElementById("edit_distance").innerHTML = `<b>Edit Distance:</b> ${text}`

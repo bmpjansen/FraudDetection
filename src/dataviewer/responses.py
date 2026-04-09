@@ -248,11 +248,20 @@ def get_history() -> dict[str, list]:
     timestamps = _process_time(content)
     hist = content
 
+    result_id = None
+    for version in hist:
+        if isinstance(version, dict):
+            candidate = version.get("result_id")
+            if candidate is not None:
+                result_id = candidate
+                break
+
     out = {
         "history": hist,
         "edit_distances": get_current_eds(),
         "timestamps": timestamps,
-        "format": "old"
+        "format": "old",
+        "result_id": result_id
     }
 
     return out
@@ -278,15 +287,15 @@ def _process_phrase_colors(text: str, factorization: list[int]):
         new_text += f"<span style='background-color:{color}'>{match}</span>"
         i += j
     
-    # Check if we processed all text to detect problems
+    # Check if we processed all text
     if i < text_len:
-        logger.debug(f"_process_phrase_colors: Not all text processed! i={i}, text_len={text_len}, "
+        print(f"DEBUG _process_phrase_colors: Not all text processed! i={i}, text_len={text_len}, "
               f"fact_sum={fact_sum}, remaining='{text[i:]}'")
         # Append remaining text as unmatched (red background). THIS SHOULD NOT HAPPEN NORMALLY.
         remaining = text[i:]
         new_text += f"<span style='background-color:#f1948a'>{remaining}</span>"
     elif i > text_len:
-        logger.debug(f"_process_phrase_colors: Processed beyond text! i={i}, text_len={text_len}, fact_sum={fact_sum}")
+        print(f"DEBUG _process_phrase_colors: Processed beyond text! i={i}, text_len={text_len}, fact_sum={fact_sum}")
     
     return new_text + '</p>'
 
@@ -327,7 +336,7 @@ def get_nr_responses() -> int:
 
 def get_num_versions() -> list[int]:
     if _response_ids is None or len(_response_ids) == 0:
-    	return [0]
+        return [0]
     else:
         num_versions_array = []
     
@@ -338,7 +347,7 @@ def get_num_versions() -> list[int]:
 
 def get_all_max_edit_distances() -> list[int]:
     if _response_ids is None or len(_response_ids) == 0:
-    	return [0]
+        return [0]
     else:
         max_edit_distances_array = []
     

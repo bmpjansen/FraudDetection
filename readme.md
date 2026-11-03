@@ -2,7 +2,7 @@
 A program to assist teachers in detection plagiarized answers for assignments given on [ans.app](https://www.ans.app/). 
 This program was created in a master thesis.
 
-This program is very early and misses features. 
+This program is a prototype and misses features. 
 Some processes might not work ideally (e.g. having to check the backend console for progress reports)
 and crashes could occur.
 
@@ -52,6 +52,11 @@ In the right sidebar, give your ANS apikey and a list of assignment ids that you
 The backend console will indicate the progress. Once a response is retrieved, the edit distance will automatically be computed.
 After all edit distances have been computed, reload the page. 
 
+An ANS apikey can be created at [https://ans.app/users/api_tokens] . 
+The assignment id of a digital test can easily be extracted from its ANS url. 
+When viewing the main page of the digital test, the URL will look like https://ans.app/content/assignments/1234567/questions . 
+The number 1234567 is the assignment id.
+
 Under 'Already retrieved assignments', you can filter responses that are part of a certain assignment, exercise or question.
 
 Additionally, on the top right (not visible in the screenshot below) you can select between three HTML processing options:
@@ -65,3 +70,17 @@ Notes:
 
 ![alt text](Frontend.png "Frontend")
 
+## Informing students
+For effective use of the tool, students should be informed upfront of the fact that the tool will be used and what behavior is expected from them. 
+It is recommended to use the ANS 'integrity pledge' functionality to do so. 
+It presents users with an integrity statement that they have to agree with, by checking a box, before being able to access the assignment. 
+In this way, you can be sure that all students are aware of the regulations.
+
+To configure the integrity pledge, go to the main page of your digital test and click the gear icon in the top-right corner:
+
+![alt text](GearIcon.png "Gear icon")
+
+Scroll down to instructions, and check the box for 'Require integrity consent'. 
+The following text can be used:
+
+"I declare that I will type my answers into the answer boxes individually, from scratch, not copying any text from external sources. I understand that the ANS edit history is used to enforce this requirement."

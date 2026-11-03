@@ -84,3 +84,5 @@ Scroll down to instructions, and check the box for 'Require integrity consent'.
 The following text can be used:
 
 "I declare that I will type my answers into the answer boxes individually, from scratch, not copying any text from external sources. I understand that the ANS edit history is used to enforce this requirement."
+
+Note that copy-paste operations involving text that the student has previously written in the textbox are allowed to reformat the answer; the tool only triggers when text is pasted from an external source.

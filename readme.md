@@ -83,6 +83,6 @@ To configure the integrity pledge, go to the main page of your digital test and 
 Scroll down to instructions, and check the box for 'Require integrity consent'. 
 The following text can be used:
 
-"I declare that I will type my answers into the answer boxes individually, from scratch, not copying any text from external sources. I understand that the ANS edit history is used to enforce this requirement."
+"I declare that I will type my answers into the answer boxes by myself, from scratch. I will not copy any text from external sources into the answer field, not even if I wrote that text myself in a different program. I understand that the ANS edit history is used to enforce this requirement and that a violation is considered fraud."
 
 Note that copy-paste operations involving text that the student has previously written in the textbox are allowed to reformat the answer; the tool only triggers when text is pasted from an external source.

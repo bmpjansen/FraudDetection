@@ -52,7 +52,7 @@ In the right sidebar, give your ANS apikey and a list of assignment ids that you
 The backend console will indicate the progress. Once a response is retrieved, the edit distance will automatically be computed.
 After all edit distances have been computed, reload the page. 
 
-An ANS apikey can be created at [https://ans.app/users/api_tokens] . 
+An ANS apikey can be created at https://ans.app/users/api_tokens . 
 The assignment id of a digital test can easily be extracted from its ANS url. 
 When viewing the main page of the digital test, the URL will look like https://ans.app/content/assignments/1234567/questions . 
 The number 1234567 is the assignment id.
@@ -86,3 +86,7 @@ The following text can be used:
 "I declare that I will type my answers into the answer boxes by myself, from scratch. I will not copy any text from external sources into the answer field, not even if I wrote that text myself in a different program. I understand that the ANS edit history is used to enforce this requirement and that a violation is considered fraud."
 
 Note that copy-paste operations involving text that the student has previously written in the textbox are allowed to reformat the answer; the tool only triggers when text is pasted from an external source.
+
+It is recommended to provide students who do not agree with this policy with a fallback option. 
+A fallback option can consist of letting the students work out their solutions on paper and asking them to submit photographs of the answers to the individual parts into the text boxes on ANS.
+In this way, the ANS grading interface can still match the relevant part of a student text to the view of the grading scheme for the corresponding part of the solution.

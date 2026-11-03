@@ -90,3 +90,7 @@ Note that copy-paste operations involving text that the student has previously w
 It is recommended to provide students who do not agree with this policy with a fallback option. 
 A fallback option can consist of letting the students work out their solutions on paper and asking them to submit photographs of the answers to the individual parts into the text boxes on ANS.
 In this way, the ANS grading interface can still match the relevant part of a student text to the view of the grading scheme for the corresponding part of the solution.
+
+To ensure that the fraud checker can do its work effectively, it is important that the desired path to a student answer indeed consists of typing all answer text from scratch.
+If you have a question whose intended answer is to apply a certain template and instantiate it correctly, then you should use the [https://support.ans.app/hc/en-us/articles/360033626593-Open-question-for-digital-tests](Predefined answer) functionality in ANS to provide the template to the students as the default value of the textbox.
+Otherwise, students may inadvertently copy-paste the template text themselves, leaving to false-positives.

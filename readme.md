@@ -6,6 +6,8 @@ This program is a prototype and misses features.
 Some processes might not work ideally (e.g. having to check the backend console for progress reports)
 and crashes could occur.
 
+If you work have questions about the program, feel free to contact Bart M. P. Jansen via b.m.p.jansen@tue.nl 
+
 ## How to run
 ### Requirements
 To run to program you need to following programs:
